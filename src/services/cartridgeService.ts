@@ -1,8 +1,10 @@
 import { pool } from "../config/db";
 
+export const CartridgeService = {
+
 //                           Cartridge Brand
 
-export const CartridgeService = {
+
   // Create a new cartridge brand
   async createCartridgeBrand(name: string) {
     const result = await pool.query(
