@@ -13,6 +13,7 @@ import cartridgeBrandRoutes from "./src/routes/cartridgeBrandRoutes";
 import cartridgeCategoryRoutes from "./src/routes/cartridgeCategoryRoutes";
 import cartridgeProductQrRoutes from "./src/routes/cartridgeProductQrRoutes";
 import softwareCustomerRoutes from "./src/routes/softwareCustomerRoutes";
+import cartridgeProductRoutes from "./src/routes/cartridgeProductRoutes";
 
 dotenv.config();
 
@@ -21,14 +22,13 @@ const app = express();
 // 🔐 Security middleware
 app.use(helmet());
 
-
 // 🌍 CORS configuration (Frontend runs on 3000)
 app.use(
   cors({
     origin: ["http://localhost:3000", "http://localhost:5173"],
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
     allowedHeaders: ["Content-Type", "Authorization"],
-  })
+  }),
 );
 
 // 📦 Body parsing
@@ -48,12 +48,19 @@ app.use("/api/cartridge/brands", cartridgeBrandRoutes);
 app.use("/api/cartridge/categories", cartridgeCategoryRoutes);
 app.use("/api/cartridge/products/qr", cartridgeProductQrRoutes);
 app.use("/api/shop", softwareCustomerRoutes);
+app.use("/api/cartridge/products", cartridgeProductRoutes);
 
 // Special nested routes
 import * as productController from "./src/controllers/softwareProductController";
 import * as planController from "./src/controllers/softwarePlanController";
-app.get("/api/software/brands/:brandId/products", productController.getProductsByBrand);
-app.get("/api/software/products/:productId/plans", planController.getPlansByProduct);
+app.get(
+  "/api/software/brands/:brandId/products",
+  productController.getProductsByBrand,
+);
+app.get(
+  "/api/software/products/:productId/plans",
+  planController.getPlansByProduct,
+);
 
 // ❌ 404 handler
 app.use((_req, res) => {
