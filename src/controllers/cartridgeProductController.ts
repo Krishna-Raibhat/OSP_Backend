@@ -1,11 +1,13 @@
 import { Request, Response } from 'express';
 import { HttpError } from '../utils/errors';
 import * as productService from '../services/cartridgeProductService';
+import { CartridgeProduct } from '../models/cartridgeModels';
 
 export async function createProduct(req: Request, res: Response) {
     try {
-        const data = await productService.createCartridgeProduct(req.body);
-        return res.status(201).json({ message: 'Product created successfully.', data });
+        const product: CartridgeProduct = await productService.createCartridgeProduct(req.body, req.user?.userId );
+
+        return res.status(201).json({ message: 'Product created successfully.', data: product });
     } catch (err: any) {
         if (err instanceof HttpError)
             return res.status(err.status).json({ message: err.message });
