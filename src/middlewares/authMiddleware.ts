@@ -37,3 +37,32 @@ export function authMiddleware(
     next(new HttpError(401, "Invalid or expired token."));
   }
 }
+
+// Optional auth middleware (doesn't fail if no token)
+export function optionalAuthMiddleware(
+  req: Request,
+  _res: Response,
+  next: NextFunction
+) {
+  try {
+    const authHeader = req.headers.authorization;
+
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      const token = authHeader.split(" ")[1];
+      const decoded = jwt.verify(token, env.JWT_SECRET) as JwtPayload;
+
+      // attach user to request if token is valid
+      req.user = {
+        userId: decoded.userId,
+        email: decoded.email,
+        role: decoded.role,
+      };
+    }
+
+    // Continue regardless of token presence
+    next();
+  } catch (err) {
+    // If token is invalid, just continue without user
+    next();
+  }
+}

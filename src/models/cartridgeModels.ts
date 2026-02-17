@@ -73,13 +73,49 @@ export type CartridgeOrderItem = {
 export type CartridgePayment = {
   id: string;
   cartridge_order_id: string;
-  payment_type: "gateway" | "manual";
+  payment_type: "gateway" | "manual" | "cod";
   gateway: string | null;
   gateway_txn_id: string | null;
   manual_reference: string | null;
   amount: number;
-  status: "initiated" | "success" | "failed";
+  status: "initiated" | "success" | "failed" | "pending";
   paid_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+// Cart models (same as software)
+export type CartridgeCart = {
+  id: string;
+  user_id: string;
+  status: "active" | "checked_out";
+  created_at: string;
+  updated_at: string;
+};
+
+export type CartridgeCartItem = {
+  id: string;
+  cart_id: string;
+  cartridge_product_id: string;
+  unit_price: number;
+  quantity: number;
+  created_at: string;
+  updated_at: string;
+};
+
+// Updated order model (with billing info for guest checkout)
+export type CartridgeOrderUpdated = {
+  id: string;
+  buyer_user_id: string | null; // Nullable for guest orders
+  
+  // Billing information
+  billing_full_name: string;
+  billing_email: string;
+  billing_phone: string;
+  billing_address: string;
+  
+  status: "pending" | "paid" | "failed" | "cancelled";
+  total: number;
   created_at: string;
   updated_at: string;
 };
