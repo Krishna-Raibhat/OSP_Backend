@@ -40,21 +40,52 @@ export async function createProduct(input: {
 }
 
 export async function getAllProducts() {
-  const q = `SELECT * FROM software_products ORDER BY created_at DESC;`;
-  const result = await pool.query<SoftwareProduct>(q);
+  const q = `
+    SELECT 
+      p.*,
+      b.name as brand_name,
+      b.image_url as brand_image_url,
+      c.name as category_name
+    FROM software_products p
+    JOIN software_brands b ON p.brand_id = b.id
+    JOIN software_categories c ON p.category_id = c.id
+    ORDER BY p.created_at DESC;
+  `;
+  const result = await pool.query(q);
   return result.rows;
 }
 
 export async function getProductById(id: string) {
-  const q = `SELECT * FROM software_products WHERE id = $1;`;
-  const result = await pool.query<SoftwareProduct>(q, [id]);
+  const q = `
+    SELECT 
+      p.*,
+      b.name as brand_name,
+      b.image_url as brand_image_url,
+      c.name as category_name
+    FROM software_products p
+    JOIN software_brands b ON p.brand_id = b.id
+    JOIN software_categories c ON p.category_id = c.id
+    WHERE p.id = $1;
+  `;
+  const result = await pool.query(q, [id]);
   if (!result.rows[0]) throw new HttpError(404, "Product not found.");
   return result.rows[0];
 }
 
 export async function getProductsByBrand(brand_id: string) {
-  const q = `SELECT * FROM software_products WHERE brand_id = $1 ORDER BY name ASC;`;
-  const result = await pool.query<SoftwareProduct>(q, [brand_id]);
+  const q = `
+    SELECT 
+      p.*,
+      b.name as brand_name,
+      b.image_url as brand_image_url,
+      c.name as category_name
+    FROM software_products p
+    JOIN software_brands b ON p.brand_id = b.id
+    JOIN software_categories c ON p.category_id = c.id
+    WHERE p.brand_id = $1 
+    ORDER BY p.name ASC;
+  `;
+  const result = await pool.query(q, [brand_id]);
   return result.rows;
 }
 

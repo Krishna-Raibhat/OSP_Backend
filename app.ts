@@ -9,6 +9,7 @@ import softwareBrandRoutes from "./src/routes/softwareBrandRoutes";
 import softwareCategoryRoutes from "./src/routes/softwareCategoryRoutes";
 import softwareProductRoutes from "./src/routes/softwareProductRoutes";
 import softwarePlanRoutes from "./src/routes/softwarePlanRoutes";
+import softwareCustomerRoutes from "./src/routes/softwareCustomerRoutes";
 
 dotenv.config();
 
@@ -21,7 +22,7 @@ app.use(helmet());
 // 🌍 CORS configuration (Frontend runs on 3000)
 app.use(
   cors({
-    origin: "http://localhost:3000",
+    origin: ["http://localhost:3000", "http://localhost:5173"],
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
     allowedHeaders: ["Content-Type", "Authorization"],
   })
@@ -40,6 +41,7 @@ app.use("/api/software/brands", softwareBrandRoutes);
 app.use("/api/software/categories", softwareCategoryRoutes);
 app.use("/api/software/products", softwareProductRoutes);
 app.use("/api/software/plans", softwarePlanRoutes);
+app.use("/api/shop", softwareCustomerRoutes);
 
 // Special nested routes
 import * as productController from "./src/controllers/softwareProductController";

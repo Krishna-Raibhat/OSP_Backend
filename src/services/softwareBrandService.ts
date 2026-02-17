@@ -2,18 +2,18 @@ import { pool } from "../config/db";
 import { HttpError, isPgUniqueViolation, isPgForeignKeyViolation } from "../utils/errors";
 import type { SoftwareBrand } from "../models/softwareModels";
 
-export async function createBrand(input: { name?: string; is_active?: boolean }) {
-  const { name, is_active = true } = input;
+export async function createBrand(input: { name?: string; image_url?: string; is_active?: boolean }) {
+  const { name, image_url, is_active = true } = input;
 
   if (!name) throw new HttpError(400, "Brand name is required.");
 
   try {
     const q = `
-      INSERT INTO software_brands (name, is_active)
-      VALUES ($1, $2)
+      INSERT INTO software_brands (name, image_url, is_active)
+      VALUES ($1, $2, $3)
       RETURNING *;
     `;
-    const result = await pool.query<SoftwareBrand>(q, [name.trim(), is_active]);
+    const result = await pool.query<SoftwareBrand>(q, [name.trim(), image_url ?? null, is_active]);
     return result.rows[0];
   } catch (err: any) {
     if (isPgUniqueViolation(err)) {
@@ -36,10 +36,10 @@ export async function getBrandById(id: string) {
   return result.rows[0];
 }
 
-export async function updateBrand(input: { id: string; name?: string; is_active?: boolean }) {
-  const { id, name, is_active } = input;
+export async function updateBrand(input: { id: string; name?: string; image_url?: string; is_active?: boolean }) {
+  const { id, name, image_url, is_active } = input;
 
-  if (!name && is_active === undefined) {
+  if (!name && image_url === undefined && is_active === undefined) {
     throw new HttpError(400, "At least one field is required.");
   }
 
@@ -51,6 +51,10 @@ export async function updateBrand(input: { id: string; name?: string; is_active?
     if (name) {
       updates.push(`name = $${paramIndex++}`);
       values.push(name.trim());
+    }
+    if (image_url !== undefined) {
+      updates.push(`image_url = $${paramIndex++}`);
+      values.push(image_url ?? null);
     }
     if (is_active !== undefined) {
       updates.push(`is_active = $${paramIndex++}`);
