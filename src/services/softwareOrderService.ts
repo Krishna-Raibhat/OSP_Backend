@@ -79,11 +79,9 @@ export async function createOrder(input: CreateOrderInput) {
             software_plan_id,
             unit_price,
             serial_number,
-            barcode_value,
-            issued_at,
-            expires_at
+            barcode_value
           )
-          VALUES ($1, $2, $3, NULL, NULL, NULL, NULL)
+          VALUES ($1, $2, $3, NULL, NULL)
           RETURNING *;
         `;
 
@@ -206,9 +204,7 @@ export async function getOrderById(order_id: string, user_id?: string) {
           'brand_name', b.name,
           'unit_price', oi.unit_price,
           'serial_number', oi.serial_number,
-          'barcode_value', oi.barcode_value,
-          'issued_at', oi.issued_at,
-          'expires_at', oi.expires_at
+          'barcode_value', oi.barcode_value
         )
       ) as items
     FROM software_orders o
@@ -268,9 +264,7 @@ export async function getGuestOrder(order_id: string, email: string) {
           'brand_name', b.name,
           'unit_price', oi.unit_price,
           'serial_number', oi.serial_number,
-          'barcode_value', oi.barcode_value,
-          'issued_at', oi.issued_at,
-          'expires_at', oi.expires_at
+          'barcode_value', oi.barcode_value
         )
       ) as items
     FROM software_orders o
@@ -309,13 +303,140 @@ export async function updateOrderStatus(order_id: string, status: "pending" | "p
   return result.rows[0];
 }
 
-// Generate serial numbers and barcodes after payment (placeholder for now)
+// Admin: Get all orders with filters
+export async function getAllOrders(filters?: {
+  status?: string;
+  payment_method?: string;
+  limit?: number;
+  offset?: number;
+}) {
+  const { status, payment_method, limit = 50, offset = 0 } = filters || {};
+
+  let whereConditions = [];
+  let params: any[] = [];
+  let paramIndex = 1;
+
+  if (status) {
+    whereConditions.push(`o.status = $${paramIndex}`);
+    params.push(status);
+    paramIndex++;
+  }
+
+  if (payment_method) {
+    whereConditions.push(`p.payment_type = $${paramIndex}`);
+    params.push(payment_method);
+    paramIndex++;
+  }
+
+  const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
+
+  const q = `
+    SELECT 
+      o.id,
+      o.buyer_user_id,
+      o.billing_full_name,
+      o.billing_email,
+      o.billing_phone,
+      o.billing_address,
+      o.status,
+      o.total,
+      o.created_at,
+      o.updated_at,
+      u.email as user_email,
+      u.role as user_role,
+      p.payment_type,
+      p.status as payment_status,
+      p.paid_at,
+      COUNT(oi.id) as item_count
+    FROM software_orders o
+    LEFT JOIN users u ON o.buyer_user_id = u.id
+    LEFT JOIN software_payments p ON o.id = p.software_order_id
+    LEFT JOIN software_order_items oi ON o.id = oi.order_id
+    ${whereClause}
+    GROUP BY o.id, u.email, u.role, p.payment_type, p.status, p.paid_at
+    ORDER BY o.created_at DESC
+    LIMIT $${paramIndex} OFFSET $${paramIndex + 1};
+  `;
+
+  params.push(limit, offset);
+
+  const result = await pool.query(q, params);
+  return result.rows;
+}
+
+// Admin: Get order details with all serial numbers
+export async function getOrderDetailsAdmin(order_id: string) {
+  const orderQuery = `
+    SELECT 
+      o.*,
+      u.email as user_email,
+      u.role as user_role,
+      u.full_name as user_full_name
+    FROM software_orders o
+    LEFT JOIN users u ON o.buyer_user_id = u.id
+    WHERE o.id = $1;
+  `;
+
+  const orderResult = await pool.query(orderQuery, [order_id]);
+
+  if (!orderResult.rows[0]) {
+    throw new HttpError(404, "Order not found.");
+  }
+
+  const order = orderResult.rows[0];
+
+  // Get payment details
+  const paymentQuery = `
+    SELECT * FROM software_payments WHERE software_order_id = $1;
+  `;
+  const paymentResult = await pool.query(paymentQuery, [order_id]);
+
+  // Get order items with full details
+  const itemsQuery = `
+    SELECT 
+      oi.id,
+      oi.software_plan_id,
+      oi.unit_price,
+      oi.serial_number,
+      oi.barcode_value,
+      oi.created_at,
+      pl.plan_name,
+      pl.duration_type,
+      p.name as product_name,
+      b.name as brand_name,
+      c.name as category_name
+    FROM software_order_items oi
+    JOIN software_plans pl ON oi.software_plan_id = pl.id
+    JOIN software_products p ON pl.software_product_id = p.id
+    JOIN software_brands b ON p.brand_id = b.id
+    JOIN software_categories c ON p.category_id = c.id
+    WHERE oi.order_id = $1
+    ORDER BY oi.created_at ASC;
+  `;
+
+  const itemsResult = await pool.query(itemsQuery, [order_id]);
+
+  return {
+    order,
+    payment: paymentResult.rows[0] || null,
+    items: itemsResult.rows,
+    summary: {
+      total_items: itemsResult.rows.length,
+      items_with_serial: itemsResult.rows.filter(item => item.serial_number).length,
+      items_without_serial: itemsResult.rows.filter(item => !item.serial_number).length,
+    }
+  };
+}
+
+// Generate serial numbers and barcodes after payment
 export async function generateLicenses(order_id: string) {
   // Get all order items without serial numbers
   const itemsQuery = `
-    SELECT id, software_plan_id 
-    FROM software_order_items 
-    WHERE order_id = $1 AND serial_number IS NULL;
+    SELECT 
+      oi.id, 
+      oi.software_plan_id
+    FROM software_order_items oi
+    WHERE oi.order_id = $1 AND oi.serial_number IS NULL;
   `;
 
   const itemsResult = await pool.query(itemsQuery, [order_id]);
@@ -324,28 +445,19 @@ export async function generateLicenses(order_id: string) {
     // Generate unique serial and barcode
     const serial = `SN-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
     const barcode = `BC-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
-    
-    // Calculate expiry (example: 1 year from now)
-    const issued_at = new Date();
-    const expires_at = new Date();
-    expires_at.setFullYear(expires_at.getFullYear() + 1);
 
     const updateQuery = `
       UPDATE software_order_items 
       SET 
         serial_number = $1,
         barcode_value = $2,
-        issued_at = $3,
-        expires_at = $4,
         updated_at = NOW()
-      WHERE id = $5;
+      WHERE id = $3;
     `;
 
     await pool.query(updateQuery, [
       serial,
       barcode,
-      issued_at.toISOString(),
-      expires_at.toISOString(),
       item.id,
     ]);
   }

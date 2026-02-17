@@ -85,8 +85,6 @@ export type SoftwareOrderItem = {
   // If cart quantity = 5, create 5 separate rows
   serial_number: string | null; // Generated after payment, unique per license
   barcode_value: string | null; // Generated after payment, unique per license
-  issued_at: string | null;
-  expires_at: string | null;
   created_at: string;
   updated_at: string;
 };
