@@ -31,7 +31,7 @@ export async function generateProductQR(product: CartridgeProduct) {
 }
 
 export async function getProductQRByProductId(
-  productId: number,
+  productId: string,
 ): Promise<CartridgeProductQR | null> {
   try {
     const result = await pool.query<CartridgeProductQR>(
@@ -47,11 +47,12 @@ export async function getProductQRByProductId(
     return result.rows[0];
 
   } catch (err) {
+    console.error("Get QR code error:", err);
     throw new HttpError(500, "Failed to retrieve QR code.");
   }
 }
 
-export async function deactivateProductQR(productId: number) {
+export async function deactivateProductQR(productId: string) {
   try {
    const result = await pool.query(
       `
@@ -69,7 +70,7 @@ export async function deactivateProductQR(productId: number) {
   }
 }
 
-export async function reactivateProductQR(productId: number) {
+export async function reactivateProductQR(productId: string) {
   try {
     const result = await pool.query(
       `
@@ -87,7 +88,7 @@ export async function reactivateProductQR(productId: number) {
   }
 }
 
-export async function deleteProductQR(productId: number) {
+export async function deleteProductQR(productId: string) {
   try {
     const result = await pool.query(
       `
@@ -120,7 +121,7 @@ export async function getAllProductQRs() {
 
 export async function updateProductQR(product: CartridgeProduct) {
   try {
-    const qrData = JSON.stringify(product);
+    const qrData = JSON.stringify(product.id);
     const qrCode = await QRCode.toDataURL(qrData);
     const result = await pool.query<CartridgeProductQR>(
       `

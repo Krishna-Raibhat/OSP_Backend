@@ -44,7 +44,7 @@ export async function updateProduct(req: Request, res: Response) {
     try {
         const input = { id: req.params.id, ...req.body };
         const product: CartridgeProduct = await productService.updateCartridgeProduct(input);
-       // await qrService.updateProductQR(product);
+       await qrController.updateQrCode(res, product);
         return res.status(200).json({ message: 'Product updated successfully.', data: product });
     } catch (err: any) {
         if (err instanceof HttpError)

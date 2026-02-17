@@ -20,7 +20,7 @@ export async function generateQrCode(res: Response, product: CartridgeProduct) {
 
 export async function getQrCodeByProductId(req: Request, res: Response) {
   try {
-    const productId = parseInt(req.params.productId as string, 10);
+    const productId = req.params.productId as string;
     const data = await qrService.getProductQRByProductId(productId);
     return res.status(200).json(data);
   } catch (err: any) {
@@ -33,7 +33,7 @@ export async function getQrCodeByProductId(req: Request, res: Response) {
 
 export async function deactivateQrCode(req: Request, res: Response) {
   try {
-    const productId = parseInt(req.params.productId as string, 10);
+    const productId = req.params.productId as string;
     await qrService.deactivateProductQR(productId);
     return res
       .status(200)
@@ -48,7 +48,7 @@ export async function deactivateQrCode(req: Request, res: Response) {
 
 export async function reactivateQrCode(req: Request, res: Response) {
   try {
-    const productId = parseInt(req.params.productId as string, 10);
+    const productId = req.params.productId as string;
     await qrService.reactivateProductQR(productId);
     return res
       .status(200)
@@ -63,7 +63,7 @@ export async function reactivateQrCode(req: Request, res: Response) {
 
 export async function deleteQrCode(req: Request, res: Response) {
   try {
-    const productId = parseInt(req.params.productId as string, 10);
+    const productId = req.params.productId as string;
     await qrService.deleteProductQR(productId);
     return res.status(200).json({ message: "QR code deleted successfully." });
   } catch (err: any) {
