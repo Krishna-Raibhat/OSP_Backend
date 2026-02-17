@@ -14,3 +14,6 @@ npm-debug.log*
 # OS
 .DS_Store
 Thumbs.db
+
+# uploads (optional - remove this line if you want to commit uploaded images)
+uploads/

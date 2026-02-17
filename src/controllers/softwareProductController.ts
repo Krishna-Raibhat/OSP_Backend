@@ -4,10 +4,7 @@ import * as productService from "../services/softwareProductService";
 
 export async function createProduct(req: Request, res: Response) {
   try {
-    const userId = req.user?.userId;
-    if (!userId) throw new HttpError(401, "Unauthorized.");
-
-    const data = await productService.createProduct({ ...req.body, created_by: userId });
+    const data = await productService.createProduct(req.body);
     return res.status(201).json({ message: "Product created successfully.", data });
   } catch (err: any) {
     if (err instanceof HttpError) return res.status(err.status).json({ message: err.message });
