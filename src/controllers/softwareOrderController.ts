@@ -4,11 +4,11 @@ import * as orderService from "../services/softwareOrderService";
 
 /* ==================== ORDER CONTROLLERS ==================== */
 
-// Create order from cart (logged-in user)
+// Create order from cart (logged-in user) OR guest checkout with items
 export async function createOrderFromCart(req: Request, res: Response) {
   try {
-    const user_id = req.user!.userId;
-    const { billing_info, payment_method = "gateway" } = req.body;
+    const user_id = req.user?.userId; // Optional - can be undefined for guests
+    const { billing_info, payment_method = "gateway", items } = req.body;
 
     if (!billing_info) {
       return res.status(400).json({ message: "billing_info is required." });
@@ -18,11 +18,31 @@ export async function createOrderFromCart(req: Request, res: Response) {
       return res.status(400).json({ message: "payment_method must be 'gateway' or 'cod'." });
     }
 
-    const result = await orderService.createOrderFromCart({
-      user_id,
-      billing_info,
-      payment_method,
-    });
+    let result;
+
+    // If items provided, use them (guest checkout or direct items)
+    if (items && Array.isArray(items) && items.length > 0) {
+      result = await orderService.createOrder({
+        user_id,
+        billing_info,
+        items,
+        payment_method,
+      });
+    } 
+    // If no items, get from user's cart (logged-in user only)
+    else {
+      if (!user_id) {
+        return res.status(400).json({ 
+          message: "items array is required for guest checkout." 
+        });
+      }
+
+      result = await orderService.createOrderFromCart({
+        user_id,
+        billing_info,
+        payment_method,
+      });
+    }
 
     return res.status(201).json({
       message: "Order and payment created successfully.",
