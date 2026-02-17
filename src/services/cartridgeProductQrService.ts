@@ -5,11 +5,13 @@ import {
   CartridgeProduct,
   CartridgeProductQR,
 } from "../models/cartridgeModels";
+import zlib from "zlib";
 
 export async function generateProductQR(product: CartridgeProduct) {
   try {
-    const qrData = JSON.stringify(product);
-    const qrCode = await QRCode.toDataURL(qrData);
+    const qrData = JSON.stringify(product.id);
+    const compressedData = zlib.gzipSync(qrData).toString("base64");
+    const qrCode = await QRCode.toDataURL(compressedData);
     const result = await pool.query<CartridgeProductQR>(
       `
     INSERT INTO cartridge_product_qr
@@ -22,7 +24,9 @@ export async function generateProductQR(product: CartridgeProduct) {
     );
     return result.rows[0];
   } catch (err) {
+    console.error("QR code generation error:", err);
     throw new HttpError(500, "Failed to generate QR code.");
+    
   }
 }
 

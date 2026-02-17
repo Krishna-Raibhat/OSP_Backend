@@ -11,8 +11,9 @@ export async function createCartridgeProduct(input: {
   unit_price: number;
   special_price?: number | null;
   is_active?: boolean;
-  created_by: string;
-}) {
+  created_by?: string | null;
+  
+}, userId?: string ) {
   const {
     brand_id,
     category_id,
@@ -22,7 +23,7 @@ export async function createCartridgeProduct(input: {
     unit_price,
     special_price = null,
     is_active = true,
-    created_by,
+    created_by = userId,
   } = input;
 
   if (!brand_id || !category_id || !product_name || !model_number || unit_price === undefined) {
