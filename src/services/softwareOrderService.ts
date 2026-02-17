@@ -22,7 +22,7 @@ interface CreateOrderInput {
   payment_method: "gateway" | "manual" | "cod"; // ✅ Added COD
 }
 
-// Create order from cart or direct checkout
+// Create order from cart or direct checkout (with payment)
 export async function createOrder(input: CreateOrderInput) {
   const { user_id, billing_info, items, payment_method } = input;
 
@@ -95,6 +95,44 @@ export async function createOrder(input: CreateOrderInput) {
       }
     }
 
+    // Create payment record based on payment method
+    let payment;
+    if (payment_method === "cod") {
+      // Create COD payment with pending status
+      const paymentQuery = `
+        INSERT INTO software_payments (
+          software_order_id,
+          payment_type,
+          gateway,
+          gateway_txn_id,
+          manual_reference,
+          amount,
+          status
+        )
+        VALUES ($1, 'cod', NULL, NULL, 'Cash on Delivery', $2, 'pending')
+        RETURNING *;
+      `;
+      const paymentResult = await client.query(paymentQuery, [order.id, total]);
+      payment = paymentResult.rows[0];
+    } else if (payment_method === "gateway") {
+      // Create gateway payment with initiated status
+      const paymentQuery = `
+        INSERT INTO software_payments (
+          software_order_id,
+          payment_type,
+          gateway,
+          gateway_txn_id,
+          manual_reference,
+          amount,
+          status
+        )
+        VALUES ($1, 'gateway', 'pending_gateway', NULL, NULL, $2, 'initiated')
+        RETURNING *;
+      `;
+      const paymentResult = await client.query(paymentQuery, [order.id, total]);
+      payment = paymentResult.rows[0];
+    }
+
     // If logged-in user, clear their cart
     if (user_id) {
       await client.query(
@@ -111,7 +149,7 @@ export async function createOrder(input: CreateOrderInput) {
 
     await client.query("COMMIT");
 
-    return order;
+    return { order, payment };
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;
