@@ -53,6 +53,9 @@ export async function updateCategory(input: { id: string; name?: string; is_acti
       values.push(name.trim());
     }
     if (is_active !== undefined) {
+      if (typeof is_active !== "boolean") {
+        throw new HttpError(400, "is_active must be a boolean.");
+      }
       updates.push(`is_active = $${paramIndex++}`);
       values.push(is_active);
     }
@@ -83,7 +86,7 @@ export async function deleteCategory(id: string) {
     const q = `DELETE FROM cartridge_categories WHERE id = $1 RETURNING *;`;
     const result = await pool.query<CartridgeCategory>(q, [id]);
     if (!result.rows[0]) throw new HttpError(404, "Category not found.");
-    return result.rows[0];
+    return { message: "Category deleted successfully." };
   } catch (err: any) {
     if (isPgForeignKeyViolation(err)) {
       throw new HttpError(400, "Cannot delete category with associated cartridges.");

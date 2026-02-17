@@ -48,8 +48,8 @@ export const CartridgeBrandController = {
     try {
       const { id } = req.params;
       const { name, is_active } = req.body;
-      if (!name || typeof is_active !== "boolean") {
-        throw new HttpError(400, "Both name and is_active are required.");
+      if (!name && typeof is_active !== "boolean") {
+        throw new HttpError(400, "name or is_active is required.");
       }
 
       const brand = await CartridgeBrandService.updateCartridgeBrand(id, {

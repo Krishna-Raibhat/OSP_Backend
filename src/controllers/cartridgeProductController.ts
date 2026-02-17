@@ -2,10 +2,12 @@ import { Request, Response } from 'express';
 import { HttpError } from '../utils/errors';
 import * as productService from '../services/cartridgeProductService';
 import { CartridgeProduct } from '../models/cartridgeModels';
+import * as qrController from './cartridgeProductQrController';
 
 export async function createProduct(req: Request, res: Response) {
     try {
         const product: CartridgeProduct = await productService.createCartridgeProduct(req.body, req.user?.userId );
+        await qrController.generateQrCode(res, product);
 
         return res.status(201).json({ message: 'Product created successfully.', data: product });
     } catch (err: any) {
@@ -41,8 +43,9 @@ export async function getProductById(req: Request, res: Response) {
 export async function updateProduct(req: Request, res: Response) {
     try {
         const input = { id: req.params.id, ...req.body };
-        const data = await productService.updateCartridgeProduct(input);
-        return res.status(200).json({ message: 'Product updated successfully.', data });
+        const product: CartridgeProduct = await productService.updateCartridgeProduct(input);
+       // await qrService.updateProductQR(product);
+        return res.status(200).json({ message: 'Product updated successfully.', data: product });
     } catch (err: any) {
         if (err instanceof HttpError)
             return res.status(err.status).json({ message: err.message });
@@ -54,7 +57,7 @@ export async function updateProduct(req: Request, res: Response) {
 export async function deleteProduct(req: Request, res: Response) {
     try {
         const data = await productService.deleteCartridgeProduct(req.params.id as string);
-        return res.status(200).json(data);
+        return res.status(200).json({ message: 'Product deleted successfully.', data });
     } catch (err: any) {
         if (err instanceof HttpError)
             return res.status(err.status).json({ message: err.message });

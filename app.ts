@@ -11,6 +11,8 @@ import softwareProductRoutes from "./src/routes/softwareProductRoutes";
 import softwarePlanRoutes from "./src/routes/softwarePlanRoutes";
 import cartridgeBrandRoutes from "./src/routes/cartridgeBrandRoutes";
 import cartridgeCategoryRoutes from "./src/routes/cartridgeCategoryRoutes";
+import cartridgeProductQrRoutes from "./src/routes/cartridgeProductQrRoutes";
+import softwareCustomerRoutes from "./src/routes/softwareCustomerRoutes";
 import cartridgeProductRoutes from "./src/routes/cartridgeProductRoutes";
 
 dotenv.config();
@@ -23,7 +25,7 @@ app.use(helmet());
 // 🌍 CORS configuration (Frontend runs on 3000)
 app.use(
   cors({
-    origin: "http://localhost:3000",
+    origin: ["http://localhost:3000", "http://localhost:5173"],
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
     allowedHeaders: ["Content-Type", "Authorization"],
   }),
@@ -44,6 +46,8 @@ app.use("/api/software/products", softwareProductRoutes);
 app.use("/api/software/plans", softwarePlanRoutes);
 app.use("/api/cartridge/brands", cartridgeBrandRoutes);
 app.use("/api/cartridge/categories", cartridgeCategoryRoutes);
+app.use("/api/cartridge/products/qr", cartridgeProductQrRoutes);
+app.use("/api/shop", softwareCustomerRoutes);
 app.use("/api/cartridge/products", cartridgeProductRoutes);
 
 // Special nested routes
