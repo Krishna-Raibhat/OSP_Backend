@@ -41,15 +41,28 @@ export type SoftwarePlan = {
   created_at: string;
   updated_at: string;
 };
+export type SoftwareCart = {
+  id: string;
+  user_id: string;
+  status: "active" | "checked_out";
+  created_at: string;
+  updated_at: string;
+};
+
+export type SoftwareCartItem = {
+  id: string;
+  cart_id: string;
+  software_plan_id: string;
+  unit_price: number; // Price at time of adding to cart
+  quantity: number; // User can add multiple licenses to cart
+  created_at: string;
+  updated_at: string;
+};
 
 export type SoftwareOrder = {
   id: string;
   buyer_user_id: string;
   status: "pending" | "paid" | "failed" | "cancelled";
-  serial_number: string | null;
-  barcode_value: string | null;
-  issued_at: string | null;
-  expires_at: string | null;
   total: number;
   created_at: string;
   updated_at: string;
@@ -60,6 +73,15 @@ export type SoftwareOrderItem = {
   order_id: string;
   software_plan_id: string;
   unit_price: number;
+
+  // 1 row = 1 license = 1 serial/barcode
+  // If cart quantity = 5, create 5 separate rows
+  serial_number: string | null; // Generated after payment, unique per license
+  barcode_value: string | null; // Generated after payment, unique per license
+  issued_at: string | null;
+  expires_at: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
 export type SoftwarePayment = {
