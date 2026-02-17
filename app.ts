@@ -13,6 +13,7 @@ import cartridgeBrandRoutes from "./src/routes/cartridgeBrandRoutes";
 import cartridgeCategoryRoutes from "./src/routes/cartridgeCategoryRoutes";
 import cartridgeProductQrRoutes from "./src/routes/cartridgeProductQrRoutes";
 import softwareCustomerRoutes from "./src/routes/softwareCustomerRoutes";
+import softwareCartRoutes from "./src/routes/softwareCartRoutes";
 import cartridgeProductRoutes from "./src/routes/cartridgeProductRoutes";
 
 dotenv.config();
@@ -48,6 +49,7 @@ app.use("/api/cartridge/brands", cartridgeBrandRoutes);
 app.use("/api/cartridge/categories", cartridgeCategoryRoutes);
 app.use("/api/cartridge/products/qr", cartridgeProductQrRoutes);
 app.use("/api/shop", softwareCustomerRoutes);
+app.use("/api/cart", softwareCartRoutes);
 app.use("/api/cartridge/products", cartridgeProductRoutes);
 
 // Special nested routes
