@@ -51,7 +51,6 @@ export async function getProductsByBrand(req: Request, res: Response) {
         return res.status(500).json({ message: 'Server error.' });
     }
 }
-
 export async function updateProduct(req: Request, res: Response) {
     try {
         const input = { id: req.params.id, ...req.body };
