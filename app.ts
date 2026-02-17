@@ -10,6 +10,7 @@ import softwareCategoryRoutes from "./src/routes/softwareCategoryRoutes";
 import softwareProductRoutes from "./src/routes/softwareProductRoutes";
 import softwarePlanRoutes from "./src/routes/softwarePlanRoutes";
 import softwareCustomerRoutes from "./src/routes/softwareCustomerRoutes";
+import softwareCartRoutes from "./src/routes/softwareCartRoutes";
 
 dotenv.config();
 
@@ -42,6 +43,7 @@ app.use("/api/software/categories", softwareCategoryRoutes);
 app.use("/api/software/products", softwareProductRoutes);
 app.use("/api/software/plans", softwarePlanRoutes);
 app.use("/api/shop", softwareCustomerRoutes);
+app.use("/api/cart", softwareCartRoutes);
 
 // Special nested routes
 import * as productController from "./src/controllers/softwareProductController";
