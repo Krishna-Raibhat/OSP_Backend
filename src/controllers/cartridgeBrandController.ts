@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { HttpError } from "../utils/errors";
 import { CartridgeBrandService } from "../services/cartridgeBrandService";
+import { validate as isUUID } from "uuid";
 
 export const CartridgeBrandController = {
   async createCartridgeBrand(req: Request, res: Response) {
@@ -33,6 +34,12 @@ export const CartridgeBrandController = {
   async getCartridgeBrandById(req: Request<{ id: string }>, res: Response) {
     try {
       const { id } = req.params;
+      if (!id) {
+        return res.status(400).json({ message: "Missing required parameter: id" });
+      }
+      if (!isUUID(id)) {
+        return res.status(400).json({ message: "Invalid ID format. ID must be a valid UUID." });
+      }
       const brand = await CartridgeBrandService.getCartridgeBrandById(id);
       if (!brand) throw new HttpError(404, "Brand not found.");
       return res.status(200).json({ brand });
@@ -47,6 +54,11 @@ export const CartridgeBrandController = {
   async updateCartridgeBrand(req: Request<{ id: string }>, res: Response) {
     try {
       const { id } = req.params;
+      if (!id) {
+        return res.status(400).json({ message: "Missing required parameter: id" });
+      } else if (!isUUID(id)) {
+        return res.status(400).json({ message: "Invalid ID format. ID must be a valid UUID." });
+      }
       const { name, is_active } = req.body;
       if (!name && typeof is_active !== "boolean") {
         throw new HttpError(400, "name or is_active is required.");
@@ -72,6 +84,12 @@ export const CartridgeBrandController = {
   async deleteCartridgeBrand(req: Request<{ id: string }>, res: Response) {
     try {
       const { id } = req.params;
+      if (!id) {
+        return res.status(400).json({ message: "Missing required parameter: id" });
+      }
+        else if (!isUUID(id)) { 
+        return res.status(400).json({ message: "Invalid ID format. ID must be a valid UUID." });
+      } 
       await CartridgeBrandService.deleteCartridgeBrand(id);
       return res.status(200).json({ message: "Brand deleted successfully." });
     } catch (err: any) {

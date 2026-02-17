@@ -3,18 +3,12 @@ import { HttpError } from "../utils/errors";
 import * as qrService from "../services/cartridgeProductQrService";
 import { CartridgeProduct } from "../models/cartridgeModels";
 
-
-export async function generateQrCode(res: Response, product: CartridgeProduct) {
+export async function generateQrCode(product: CartridgeProduct) {
   try {
     const data = await qrService.generateProductQR(product);
-    return res
-      .status(201)
-      .json({ message: "QR code generated successfully.", data });
+    return data;
   } catch (err: any) {
-    if (err instanceof HttpError)
-      return res.status(err.status).json({ message: err.message });
-    console.error("Generate QR code error:", err);
-    return res.status(500).json({ message: "Server error." });
+    return err;
   }
 }
 
@@ -48,7 +42,10 @@ export async function deactivateQrCode(req: Request, res: Response) {
 
 export async function reactivateQrCode(req: Request, res: Response) {
   try {
+
+    
     const productId = req.params.productId as string;
+
     await qrService.reactivateProductQR(productId);
     return res
       .status(200)
@@ -84,16 +81,11 @@ export async function getAllQrCodes(req: Request, res: Response) {
   }
 }
 
-export async function updateQrCode(res: Response, product: CartridgeProduct) {
+export async function updateQrCode(product: CartridgeProduct) {
   try {
     const data = await qrService.updateProductQR(product);
-    return res
-      .status(200)
-      .json({ message: "QR code updated successfully.", data });
+    return data;
   } catch (err: any) {
-    if (err instanceof HttpError)
-      return res.status(err.status).json({ message: err.message });
-    console.error("Update QR code error:", err);
-    return res.status(500).json({ message: "Server error." });
+    return err;
   }
 }
