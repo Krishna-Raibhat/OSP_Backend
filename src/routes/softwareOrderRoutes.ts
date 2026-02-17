@@ -7,7 +7,6 @@ const router = Router();
 
 // Public routes (no auth required)
 router.post("/track", orderController.trackGuestOrder); // Track guest order
-router.post("/create", orderController.createOrder); // Create order (guest or logged-in)
 
 // Semi-public route (auth optional - works for both logged-in and guest)
 router.post("/from-cart", optionalAuthMiddleware, orderController.createOrderFromCart); // Create from cart or guest checkout
