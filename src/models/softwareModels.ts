@@ -61,7 +61,14 @@ export type SoftwareCartItem = {
 
 export type SoftwareOrder = {
   id: string;
-  buyer_user_id: string;
+  buyer_user_id: string | null; // ✅ Nullable for guest orders
+  
+  // Billing information (required for all orders)
+  billing_full_name: string;
+  billing_email: string;
+  billing_phone: string;
+  billing_address: string;
+  
   status: "pending" | "paid" | "failed" | "cancelled";
   total: number;
   created_at: string;
@@ -87,12 +94,12 @@ export type SoftwareOrderItem = {
 export type SoftwarePayment = {
   id: string;
   software_order_id: string;
-  payment_type: "gateway" | "manual";
+  payment_type: "gateway" | "manual" | "cod"; // ✅ Added COD
   gateway: string | null;
   gateway_txn_id: string | null;
   manual_reference: string | null;
   amount: number;
-  status: "initiated" | "success" | "failed";
+  status: "initiated" | "success" | "failed" | "pending"; // ✅ Added pending for COD
   paid_at: string | null;
   created_at: string;
   updated_at: string;
