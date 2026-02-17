@@ -4,16 +4,16 @@ import type { CartridgeBrand } from "../models/cartridgeModels";
 
 export const CartridgeBrandService = {
 
-  async createCartridgeBrand(name: string) {
+  async createCartridgeBrand(name: string, img_url?: string) {
     if (!name) throw new HttpError(400, "Brand name is required.");
 
     try {
       const q = `
-        INSERT INTO cartridge_brands (name)
-        VALUES ($1)
+        INSERT INTO cartridge_brands (name, img_url)
+        VALUES ($1, $2)
         RETURNING *;
       `;
-      const result = await pool.query<CartridgeBrand>(q, [name.trim()]);
+      const result = await pool.query<CartridgeBrand>(q, [name.trim(), img_url ?? null]);
       return result.rows[0];
     } catch (err: any) {
       if (isPgUniqueViolation(err)) {
@@ -36,22 +36,23 @@ export const CartridgeBrandService = {
     return result.rows[0];
   },
 
-  async updateCartridgeBrand(id: string, data: { name: string; is_active: boolean }) {
-    const { name, is_active } = data;
-    if (!name && typeof is_active !== "boolean") {
-      throw new HttpError(400, "Any one of name or is_active is required.");
+  async updateCartridgeBrand(id: string, data: { name: string; img_url?: string | null; is_active: boolean }) {
+    const { name, img_url, is_active } = data;
+    if (!name && typeof is_active !== "boolean" && img_url === undefined) {
+      throw new HttpError(400, "Any one of name, img_url or is_active is required.");
     }
 
     try {
       const q = `
         UPDATE cartridge_brands
         SET name = COALESCE($1, name),
-            is_active = COALESCE($2, is_active),
+            img_url = COALESCE($2, img_url),
+            is_active = COALESCE($3, is_active),
             updated_at = NOW()
-        WHERE id = $3
+        WHERE id = $4
         RETURNING *;
       `;  
-      const result = await pool.query<CartridgeBrand>(q, [name?.trim(), is_active, id]);
+      const result = await pool.query<CartridgeBrand>(q, [name?.trim(), img_url ?? null, is_active, id]);
       if (!result.rows[0]) throw new HttpError(404, "Brand not found.");
       return result.rows[0];
     } catch (err: any) {
