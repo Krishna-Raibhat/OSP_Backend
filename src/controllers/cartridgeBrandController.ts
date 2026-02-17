@@ -6,10 +6,10 @@ import { validate as isUUID } from "uuid";
 export const CartridgeBrandController = {
   async createCartridgeBrand(req: Request, res: Response) {
     try {
-      const { name } = req.body;
+      const { name, img_url } = req.body;
       if (!name) throw new HttpError(400, "Brand name is required.");
 
-      const brand = await CartridgeBrandService.createCartridgeBrand(name);
+      const brand = await CartridgeBrandService.createCartridgeBrand(name, img_url);
       return res
         .status(201)
         .json({ message: "Brand created successfully.", brand });
