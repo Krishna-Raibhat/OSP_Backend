@@ -5,13 +5,13 @@ import {
   CartridgeProduct,
   CartridgeProductQR,
 } from "../models/cartridgeModels";
-import zlib from "zlib";
+
 
 export async function generateProductQR(product: CartridgeProduct) {
   try {
     const qrData = JSON.stringify(product.id);
-    const compressedData = zlib.gzipSync(qrData).toString("base64");
-    const qrCode = await QRCode.toDataURL(compressedData);
+
+    const qrCode = await QRCode.toDataURL(qrData);
     const result = await pool.query<CartridgeProductQR>(
       `
     INSERT INTO cartridge_product_qr
