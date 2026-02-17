@@ -32,9 +32,6 @@ app.use(
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// 📁 Serve static files (uploaded images)
-app.use("/uploads", express.static("uploads"));
-
 // 📄 Logger
 app.use(morgan("dev"));
 

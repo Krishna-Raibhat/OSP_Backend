@@ -1,21 +1,10 @@
 import multer from "multer";
-import path from "path";
-import { Request } from "express";
 
-// Configure storage
-const storage = multer.diskStorage({
-  destination: (req: Request, file: Express.Multer.File, cb) => {
-    cb(null, "uploads/brands"); // Store in uploads/brands folder
-  },
-  filename: (req: Request, file: Express.Multer.File, cb) => {
-    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-    const ext = path.extname(file.originalname);
-    cb(null, "brand-" + uniqueSuffix + ext);
-  },
-});
+// Use memory storage for S3 upload
+const storage = multer.memoryStorage();
 
 // File filter - only images
-const fileFilter = (req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
+const fileFilter = (req: any, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
   const allowedTypes = ["image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp"];
   
   if (allowedTypes.includes(file.mimetype)) {
