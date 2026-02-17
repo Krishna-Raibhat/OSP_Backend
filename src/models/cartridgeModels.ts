@@ -31,6 +31,15 @@ export type CartridgeProduct = {
   updated_at: string;
 };
 
+export type CartridgeProductQR = {
+  id: string;
+  cartridge_product_id: string;
+  qr_value: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
 export type CartridgeInventoryUnit = {
   id: string;
   cartridge_product_id: string;
@@ -64,8 +73,13 @@ export type CartridgeOrderItem = {
 export type CartridgePayment = {
   id: string;
   cartridge_order_id: string;
-  gateway: string;
-  gateway_txn_id: string;
+  payment_type: "gateway" | "manual";
+  gateway: string | null;
+  gateway_txn_id: string | null;
+  manual_reference: string | null;
   amount: number;
   status: "initiated" | "success" | "failed";
+  paid_at: string | null;
+  created_at: string;
+  updated_at: string;
 };
