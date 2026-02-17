@@ -8,9 +8,8 @@ export async function createProduct(input: {
   name?: string;
   description?: string;
   is_active?: boolean;
-  created_by: string;
 }) {
-  const { brand_id, category_id, name, description, is_active = true, created_by } = input;
+  const { brand_id, category_id, name, description, is_active = true } = input;
 
   if (!brand_id) throw new HttpError(400, "Brand ID is required.");
   if (!category_id) throw new HttpError(400, "Category ID is required.");
@@ -18,8 +17,8 @@ export async function createProduct(input: {
 
   try {
     const q = `
-      INSERT INTO software_products (brand_id, category_id, name, description, is_active, created_by)
-      VALUES ($1, $2, $3, $4, $5, $6)
+      INSERT INTO software_products (brand_id, category_id, name, description, is_active)
+      VALUES ($1, $2, $3, $4, $5)
       RETURNING *;
     `;
     const result = await pool.query<SoftwareProduct>(q, [
@@ -28,7 +27,6 @@ export async function createProduct(input: {
       name.trim(),
       description ?? null,
       is_active,
-      created_by,
     ]);
     return result.rows[0];
   } catch (err: any) {
