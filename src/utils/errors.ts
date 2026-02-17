@@ -9,3 +9,7 @@ export class HttpError extends Error {
 export function isPgUniqueViolation(err: any): boolean {
   return err?.code === "23505"; // unique_violation
 }
+
+export function isPgForeignKeyViolation(err: any): boolean {
+  return err?.code === "23503"; // foreign_key_violation
+}
