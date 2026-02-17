@@ -45,8 +45,8 @@ export type SoftwareOrder = {
   id: string;
   buyer_user_id: string;
   status: "pending" | "paid" | "failed" | "cancelled";
-  serial_number: string;
-  barcode_value: string;
+  serial_number: string | null;
+  barcode_value: string | null;
   issued_at: string | null;
   expires_at: string | null;
   total: number;
@@ -61,11 +61,16 @@ export type SoftwareOrderItem = {
   unit_price: number;
 };
 
-export type SoftwareGatewayPayment = {
+export type SoftwarePayment = {
   id: string;
   software_order_id: string;
-  gateway: string;
-  gateway_txn_id: string;
+  payment_type: "gateway" | "manual";
+  gateway: string | null;
+  gateway_txn_id: string | null;
+  manual_reference: string | null;
   amount: number;
   status: "initiated" | "success" | "failed";
+  paid_at: string | null;
+  created_at: string;
+  updated_at: string;
 };
