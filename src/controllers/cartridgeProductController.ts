@@ -69,6 +69,17 @@ export async function getProductById(req: Request, res: Response) {
     }
 }
 
+export async function getProductsByBrand(req: Request, res: Response) {
+    try {
+        const data = await productService.getCartridgeProductsByBrand(req.params.brandId as string);
+        return res.status(200).json(data);
+    } catch (err: any) {
+        if (err instanceof HttpError)
+            return res.status(err.status).json({ message: err.message });
+        console.error('Get products by brand error:', err);
+        return res.status(500).json({ message: 'Server error.' });
+    }
+}
 export async function updateProduct(req: Request, res: Response) {
     try {
         const input = { id: req.params.id, ...req.body };
