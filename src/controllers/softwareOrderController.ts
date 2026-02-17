@@ -119,3 +119,42 @@ export async function trackGuestOrder(req: Request, res: Response) {
     return res.status(500).json({ message: "Server error." });
   }
 }
+
+/* ==================== ADMIN ORDER CONTROLLERS ==================== */
+
+// Admin: Get all orders with filters
+export async function getAllOrdersAdmin(req: Request, res: Response) {
+  try {
+    const { status, payment_method, limit, offset } = req.query;
+
+    const orders = await orderService.getAllOrders({
+      status: status as string,
+      payment_method: payment_method as string,
+      limit: limit ? Number(limit) : undefined,
+      offset: offset ? Number(offset) : undefined,
+    });
+
+    return res.status(200).json({
+      orders,
+      count: orders.length,
+    });
+  } catch (err: any) {
+    if (err instanceof HttpError) return res.status(err.status).json({ message: err.message });
+    console.error("Get all orders error:", err);
+    return res.status(500).json({ message: "Server error." });
+  }
+}
+
+// Admin: Get order details with serial numbers
+export async function getOrderDetailsAdmin(req: Request, res: Response) {
+  try {
+    const order_id = String(req.params.order_id);
+
+    const orderDetails = await orderService.getOrderDetailsAdmin(order_id);
+    return res.status(200).json(orderDetails);
+  } catch (err: any) {
+    if (err instanceof HttpError) return res.status(err.status).json({ message: err.message });
+    console.error("Get order details error:", err);
+    return res.status(500).json({ message: "Server error." });
+  }
+}
