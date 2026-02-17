@@ -1,5 +1,5 @@
 import bcrypt from "bcrypt";
-import jwt from "jsonwebtoken";
+import jwt, { SignOptions } from "jsonwebtoken";
 import { pool } from "../config/db";
 import { HttpError, isPgUniqueViolation } from "../utils/errors";
 import { env } from "../utils/env";
@@ -27,10 +27,20 @@ function validatePassword(password: string): void {
   }
 }
 
-function signToken(userId: string, email: string, role: UserRole): string {
-  return jwt.sign({ userId, email, role }, env.JWT_SECRET, {
-    expiresIn: env.JWT_EXPIRES_IN,
-  });
+export function signToken(
+  userId: string,
+  email: string,
+  role: UserRole
+): string {
+  const options: SignOptions = {
+    expiresIn: env.JWT_EXPIRES_IN as SignOptions["expiresIn"],
+  };
+
+  return jwt.sign(
+    { userId, email, role },
+    env.JWT_SECRET,
+    options
+  );
 }
 
 /* ---------- REGISTER ---------- */
