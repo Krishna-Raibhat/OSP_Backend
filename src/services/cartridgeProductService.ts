@@ -77,31 +77,48 @@ export async function createCartridgeProduct(
 }
 
 export async function getAllCartridgeProducts() {
+  try {
   const q = `SELECT p.*, b.name as brand_name, b.img_url as brand_image_url,
   c.name as category_name FROM cartridge_products p LEFT JOIN cartridge_brands b ON p.brand_id = b.id
   LEFT JOIN cartridge_categories c ON p.category_id = c.id ORDER BY p.created_at DESC;`;
   const result = await pool.query<CartridgeProduct>(q);
-  return result.rows;
+  return result.rows;}
+catch (err) {
+  console.error('Error retrieving products:', err);
+  throw new HttpError(500, "Failed to retrieve products.");
+}
 }
 
 export async function getCartridgeProductById(id: string) {
-  const q = `SELECT p.*, b.name as brand_name, b.img_url as brand_image_url, 
-  c.name as category_name FROM cartridge_products p LEFT JOIN cartridge_brands b ON p.brand_id = b.id
-  LEFT JOIN cartridge_categories c ON p.category_id = c.id WHERE p.id = $1;
-  `;
-
-  const result = await pool.query<CartridgeProduct>(q, [id]);
-  if (!result.rows[0]) throw new HttpError(404, "Product not found.");
-  return result.rows[0];
+  try{
+    
+    const q = `SELECT p.*, b.name as brand_name, b.img_url as brand_image_url, 
+    c.name as category_name FROM cartridge_products p LEFT JOIN cartridge_brands b ON p.brand_id = b.id
+    LEFT JOIN cartridge_categories c ON p.category_id = c.id WHERE p.id = $1;
+    `;
+    
+    const result = await pool.query<CartridgeProduct>(q, [id]);
+    if (!result.rows[0]) throw new HttpError(404, "Product not found.");
+    return result.rows[0];
+  } catch (err) {
+    console.error('Error retrieving product by ID:', err);
+    throw new HttpError(500, "Failed to retrieve product.");
+  }
 }
 
 export async function getCartridgeProductsByBrand(brand_id: string) {
-  const q = `SELECT p.*, b.name as brand_name, b.img_url as brand_image_url,
-  c.name as category_name FROM cartridge_products p LEFT JOIN cartridge_brands b ON p.brand_id = b.id
-  LEFT JOIN cartridge_categories c ON p.category_id = c.id WHERE p.brand_id = $1 ORDER BY p.created_at DESC;
-  `;
-  const result = await pool.query<CartridgeProduct>(q, [brand_id]);
-  return result.rows;
+  try{
+
+    const q = `SELECT p.*, b.name as brand_name, b.img_url as brand_image_url,
+    c.name as category_name FROM cartridge_products p LEFT JOIN cartridge_brands b ON p.brand_id = b.id
+    LEFT JOIN cartridge_categories c ON p.category_id = c.id WHERE p.brand_id = $1 ORDER BY p.created_at DESC;
+    `;
+    const result = await pool.query<CartridgeProduct>(q, [brand_id]);
+    return result.rows;
+  } catch (err) {
+    console.error('Error retrieving products by brand:', err);
+    throw new HttpError(500, "Failed to retrieve products by brand.");
+  }
 }
 
 
@@ -172,3 +189,23 @@ export async function deleteCartridgeProduct(id: string) {
     throw err;
   }
 }
+
+export async  function getProductByQrId(qrId : string) {
+  try {
+    const q = `SELECT p.*, b.name as brand_name, b.img_url as brand_image_url,
+c.name as category_name FROM cartridge_products p LEFT JOIN cartridge_brands b ON p.brand_id = b.id
+LEFT JOIN cartridge_categories c ON p.category_id = c.id
+INNER JOIN cartridge_product_qr q ON p.id = q.cartridge_product_id
+WHERE q.id = $1;
+`;
+    const result = await pool.query<CartridgeProduct>(q, [qrId]);
+    if (!result.rows[0]) throw new HttpError(404, "Product not found for this QR code.");
+    return result.rows[0];
+  } catch (err) {
+    console.error('Error retrieving product by QR code:', err);
+    throw new HttpError(500, "Failed to retrieve product by QR code.");
+  }
+}
+
+
+
