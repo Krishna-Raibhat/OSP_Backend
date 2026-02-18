@@ -7,14 +7,13 @@ import type { SoftwareBrand, SoftwareProduct, SoftwarePlan } from "../models/sof
 
 // Get all active brands for customers
 export async function getActiveBrands() {
-  const q = `SELECT id, name, thumbnail_url, original_url FROM software_brands WHERE is_active = true ORDER BY name ASC;`;
+  const q = `SELECT id, name, thumbnail_url FROM software_brands WHERE is_active = true ORDER BY name ASC;`;
   const result = await pool.query<SoftwareBrand>(q);
   
   // Add full S3 URLs
   return result.rows.map(brand => ({
     ...brand,
     thumbnail_url: brand.thumbnail_url ? getS3Url(brand.thumbnail_url) : null,
-    original_url: brand.original_url ? getS3Url(brand.original_url) : null,
   }));
 }
 
@@ -36,7 +35,6 @@ export async function getProductsByBrandForCustomer(brand_id: string, userRole?:
       p.description,
       b.name as brand_name,
       b.thumbnail_url as brand_thumbnail_url,
-      b.original_url as brand_original_url,
       c.name as category_name
     FROM software_products p
     JOIN software_brands b ON p.brand_id = b.id
@@ -55,7 +53,6 @@ export async function getProductsByBrandForCustomer(brand_id: string, userRole?:
       return {
         ...product,
         brand_thumbnail_url: product.brand_thumbnail_url ? getS3Url(product.brand_thumbnail_url) : null,
-        brand_original_url: product.brand_original_url ? getS3Url(product.brand_original_url) : null,
         plans,
       };
     })
@@ -176,7 +173,6 @@ export async function getAllProductsForCustomer(userRole?: string) {
       p.description,
       b.name as brand_name,
       b.thumbnail_url as brand_thumbnail_url,
-      b.original_url as brand_original_url,
       c.name as category_name
     FROM software_products p
     JOIN software_brands b ON p.brand_id = b.id
@@ -194,7 +190,6 @@ export async function getAllProductsForCustomer(userRole?: string) {
       return {
         ...product,
         brand_thumbnail_url: product.brand_thumbnail_url ? getS3Url(product.brand_thumbnail_url) : null,
-        brand_original_url: product.brand_original_url ? getS3Url(product.brand_original_url) : null,
         plans,
       };
     })

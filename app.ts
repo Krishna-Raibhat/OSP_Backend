@@ -17,6 +17,9 @@ import softwareCartRoutes from "./src/routes/softwareCartRoutes";
 import softwareOrderRoutes from "./src/routes/softwareOrderRoutes";
 import softwarePaymentRoutes from "./src/routes/softwarePaymentRoutes";
 import cartridgeProductRoutes from "./src/routes/cartridgeProductRoutes";
+import cartridgeCartRoutes from "./src/routes/cartridgeCartRoutes";
+import cartridgeOrderRoutes from "./src/routes/cartridgeOrderRoutes";
+import cartridgePaymentRoutes from "./src/routes/cartridgePaymentRoutes";
 
 dotenv.config();
 
@@ -55,6 +58,9 @@ app.use("/api/cart", softwareCartRoutes);
 app.use("/api/orders", softwareOrderRoutes);
 app.use("/api/payments", softwarePaymentRoutes);
 app.use("/api/cartridge/products", cartridgeProductRoutes);
+app.use("/api/cartridge/cart", cartridgeCartRoutes);
+app.use("/api/cartridge/orders", cartridgeOrderRoutes);
+app.use("/api/cartridge/payments", cartridgePaymentRoutes);
 
 // Special nested routes
 import * as productController from "./src/controllers/softwareProductController";
