@@ -63,6 +63,7 @@ export async function lookupSoftwareBySerial(serial_number: string) {
   const customerOrders = await pool.query(customerOrdersQuery, [item.billing_email]);
 
   return {
+    purchaser_name: item.billing_full_name,
     serial_info: {
       serial_number: item.serial_number,
       product_name: item.product_name,
@@ -170,6 +171,7 @@ export async function lookupCartridgeBySerial(serial_number: string) {
   const customerOrders = await pool.query(customerOrdersQuery, [matchedItem.billing_email]);
 
   return {
+    purchaser_name: matchedItem.billing_full_name,
     serial_info: {
       serial_number: matchedSerial,
       product_name: matchedItem.product_name,
