@@ -11,6 +11,12 @@ import softwareProductRoutes from "./src/routes/softwareProductRoutes";
 import softwarePlanRoutes from "./src/routes/softwarePlanRoutes";
 import softwareCustomerRoutes from "./src/routes/softwareCustomerRoutes";
 
+
+// for the testing
+
+import esewaRoutes from "./src/test/esewa.routes";
+
+
 dotenv.config();
 
 const app = express();
@@ -48,6 +54,9 @@ import * as productController from "./src/controllers/softwareProductController"
 import * as planController from "./src/controllers/softwarePlanController";
 app.get("/api/software/brands/:brandId/products", productController.getProductsByBrand);
 app.get("/api/software/products/:productId/plans", planController.getPlansByProduct);
+
+
+app.use("/esewa", esewaRoutes);
 
 // ❌ 404 handler
 app.use((_req, res) => {
