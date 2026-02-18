@@ -1,6 +1,7 @@
 import { pool } from "../config/db";
 import { HttpError } from "../utils/errors";
 import type { SoftwareOrder, SoftwareOrderItem, SoftwareCartItem } from "../models/softwareModels";
+import { generateBarcodeImage } from "../utils/barcodeGenerator";
 
 /* ==================== ORDER SERVICES ==================== */
 
@@ -73,19 +74,17 @@ export async function createOrder(input: CreateOrderInput) {
     for (const item of items) {
       // Create multiple rows based on quantity (1 row = 1 license)
       for (let i = 0; i < item.quantity; i++) {
-        // Generate serial and barcode immediately
+        // Generate serial number immediately (barcode generated on-demand)
         const serial = `SN-${Date.now()}-${Math.random().toString(36).substring(2, 11).toUpperCase()}`;
-        const barcode = `BC-${Date.now()}-${Math.random().toString(36).substring(2, 11).toUpperCase()}`;
 
         const itemQuery = `
           INSERT INTO software_order_items (
             order_id,
             software_plan_id,
             unit_price,
-            serial_number,
-            barcode_value
+            serial_number
           )
-          VALUES ($1, $2, $3, $4, $5)
+          VALUES ($1, $2, $3, $4)
           RETURNING *;
         `;
 
@@ -94,7 +93,6 @@ export async function createOrder(input: CreateOrderInput) {
           item.software_plan_id,
           item.unit_price,
           serial,
-          barcode,
         ]);
       }
     }
@@ -211,8 +209,7 @@ export async function getOrderById(order_id: string, user_id?: string) {
           'product_name', p.name,
           'brand_name', b.name,
           'unit_price', oi.unit_price,
-          'serial_number', oi.serial_number,
-          'barcode_value', oi.barcode_value
+          'serial_number', oi.serial_number
         )
       ) as items
     FROM software_orders o
@@ -271,8 +268,7 @@ export async function getGuestOrder(order_id: string, email: string) {
           'product_name', p.name,
           'brand_name', b.name,
           'unit_price', oi.unit_price,
-          'serial_number', oi.serial_number,
-          'barcode_value', oi.barcode_value
+          'serial_number', oi.serial_number
         )
       ) as items
     FROM software_orders o
@@ -366,8 +362,7 @@ export async function getAllOrders(filters?: {
           'plan_name', pl.plan_name,
           'category_name', c.name,
           'unit_price', oi.unit_price,
-          'serial_number', oi.serial_number,
-          'barcode_value', oi.barcode_value
+          'serial_number', oi.serial_number
         ) ORDER BY oi.created_at
       ) as order_items
     FROM software_orders o
@@ -390,7 +385,7 @@ export async function getAllOrders(filters?: {
   return result.rows;
 }
 
-// Admin: Get order details with all serial numbers
+// Admin: Get order details with barcode images
 export async function getOrderDetailsAdmin(order_id: string) {
   const orderQuery = `
     SELECT 
@@ -424,7 +419,6 @@ export async function getOrderDetailsAdmin(order_id: string) {
       oi.software_plan_id,
       oi.unit_price,
       oi.serial_number,
-      oi.barcode_value,
       oi.created_at,
       pl.plan_name,
       pl.duration_type,
@@ -442,19 +436,44 @@ export async function getOrderDetailsAdmin(order_id: string) {
 
   const itemsResult = await pool.query(itemsQuery, [order_id]);
 
+  // Generate barcode images for items with serial numbers
+  const itemsWithBarcodes = await Promise.all(
+    itemsResult.rows.map(async (item: any) => {
+      if (item.serial_number) {
+        try {
+          const barcodeImage = await generateBarcodeImage(item.serial_number);
+          return {
+            ...item,
+            barcode_image: barcodeImage, // Base64 data URL
+          };
+        } catch (error) {
+          console.error(`Failed to generate barcode for item ${item.id}:`, error);
+          return {
+            ...item,
+            barcode_image: null,
+          };
+        }
+      }
+      return {
+        ...item,
+        barcode_image: null,
+      };
+    })
+  );
+
   return {
     order,
     payment: paymentResult.rows[0] || null,
-    items: itemsResult.rows,
+    items: itemsWithBarcodes,
     summary: {
-      total_items: itemsResult.rows.length,
-      items_with_serial: itemsResult.rows.filter(item => item.serial_number).length,
-      items_without_serial: itemsResult.rows.filter(item => !item.serial_number).length,
+      total_items: itemsWithBarcodes.length,
+      items_with_serial: itemsWithBarcodes.filter((item: any) => item.serial_number).length,
+      items_without_serial: itemsWithBarcodes.filter((item: any) => !item.serial_number).length,
     }
   };
 }
 
-// Generate serial numbers and barcodes after payment
+// Generate serial numbers after payment (barcode generated on-demand from serial)
 export async function generateLicenses(order_id: string) {
   // Get all order items without serial numbers
   const itemsQuery = `
@@ -468,24 +487,18 @@ export async function generateLicenses(order_id: string) {
   const itemsResult = await pool.query(itemsQuery, [order_id]);
 
   for (const item of itemsResult.rows) {
-    // Generate unique serial and barcode
-    const serial = `SN-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
-    const barcode = `BC-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+    // Generate unique serial number (barcode will be generated from this)
+    const serial = `SN-${Date.now()}-${Math.random().toString(36).substring(2, 11).toUpperCase()}`;
 
     const updateQuery = `
       UPDATE software_order_items 
       SET 
         serial_number = $1,
-        barcode_value = $2,
         updated_at = NOW()
-      WHERE id = $3;
+      WHERE id = $2;
     `;
 
-    await pool.query(updateQuery, [
-      serial,
-      barcode,
-      item.id,
-    ]);
+    await pool.query(updateQuery, [serial, item.id]);
   }
 
   return { message: "Licenses generated successfully." };

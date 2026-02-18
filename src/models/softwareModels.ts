@@ -81,10 +81,10 @@ export type SoftwareOrderItem = {
   software_plan_id: string;
   unit_price: number;
 
-  // 1 row = 1 license = 1 serial/barcode
+  // 1 row = 1 license
   // If cart quantity = 5, create 5 separate rows
+  // Barcode is generated dynamically from serial_number (not stored)
   serial_number: string | null; // Generated after payment, unique per license
-  barcode_value: string | null; // Generated after payment, unique per license
   created_at: string;
   updated_at: string;
 };
