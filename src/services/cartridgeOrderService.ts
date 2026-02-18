@@ -44,7 +44,7 @@ export async function createOrder(input: CreateOrderInput) {
   try {
     await client.query("BEGIN");
 
-    // Create order
+    // Create order with paid status
     const orderQuery = `
       INSERT INTO cartridge_orders (
         buyer_user_id,
@@ -55,7 +55,7 @@ export async function createOrder(input: CreateOrderInput) {
         status,
         total
       )
-      VALUES ($1, $2, $3, $4, $5, 'pending', $6)
+      VALUES ($1, $2, $3, $4, $5, 'paid', $6)
       RETURNING *;
     `;
 
@@ -70,8 +70,11 @@ export async function createOrder(input: CreateOrderInput) {
 
     const order = orderResult.rows[0];
 
-    // Create order items (1 row per unit based on quantity)
+    // Create order items with serial numbers generated immediately
     for (const item of items) {
+      // Generate serial number immediately
+      const serial = `CART-SN-${Date.now()}-${Math.random().toString(36).substring(2, 11).toUpperCase()}`;
+
       const itemQuery = `
         INSERT INTO cartridge_order_items (
           order_id,
@@ -80,7 +83,7 @@ export async function createOrder(input: CreateOrderInput) {
           unit_price,
           serial_number
         )
-        VALUES ($1, $2, $3, $4, NULL)
+        VALUES ($1, $2, $3, $4, $5)
         RETURNING *;
       `;
 
@@ -89,13 +92,14 @@ export async function createOrder(input: CreateOrderInput) {
         item.cartridge_product_id,
         item.quantity,
         item.unit_price,
+        serial,
       ]);
     }
 
-    // Create payment record based on payment method
+    // Create payment record with success status
     let payment;
     if (payment_method === "cod") {
-      // Create COD payment with pending status
+      // Create COD payment with success status
       const paymentQuery = `
         INSERT INTO cartridge_payments (
           cartridge_order_id,
@@ -104,15 +108,16 @@ export async function createOrder(input: CreateOrderInput) {
           gateway_txn_id,
           manual_reference,
           amount,
-          status
+          status,
+          paid_at
         )
-        VALUES ($1, 'cod', NULL, NULL, 'Cash on Delivery', $2, 'pending')
+        VALUES ($1, 'cod', NULL, NULL, 'Cash on Delivery', $2, 'success', NOW())
         RETURNING *;
       `;
       const paymentResult = await client.query(paymentQuery, [order.id, total]);
       payment = paymentResult.rows[0];
     } else if (payment_method === "gateway") {
-      // Create gateway payment with initiated status
+      // Create gateway payment with success status
       const paymentQuery = `
         INSERT INTO cartridge_payments (
           cartridge_order_id,
@@ -121,9 +126,10 @@ export async function createOrder(input: CreateOrderInput) {
           gateway_txn_id,
           manual_reference,
           amount,
-          status
+          status,
+          paid_at
         )
-        VALUES ($1, 'gateway', 'pending_gateway', NULL, NULL, $2, 'initiated')
+        VALUES ($1, 'gateway', 'completed', NULL, NULL, $2, 'success', NOW())
         RETURNING *;
       `;
       const paymentResult = await client.query(paymentQuery, [order.id, total]);
