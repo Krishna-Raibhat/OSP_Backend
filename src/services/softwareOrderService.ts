@@ -332,28 +332,46 @@ export async function getAllOrders(filters?: {
 
   const q = `
     SELECT 
-      o.id,
+      o.id as order_id,
       o.buyer_user_id,
       o.billing_full_name,
       o.billing_email,
       o.billing_phone,
       o.billing_address,
-      o.status,
-      o.total,
-      o.created_at,
-      o.updated_at,
+      o.status as order_status,
+      o.total as order_total,
+      o.created_at as order_created_at,
+      o.updated_at as order_updated_at,
       u.email as user_email,
+      u.full_name as user_full_name,
       u.role as user_role,
+      p.id as payment_id,
       p.payment_type,
       p.status as payment_status,
+      p.amount as payment_amount,
       p.paid_at,
-      COUNT(oi.id) as item_count
+      json_agg(
+        json_build_object(
+          'item_id', oi.id,
+          'product_name', prod.name,
+          'brand_name', b.name,
+          'plan_name', pl.plan_name,
+          'category_name', c.name,
+          'unit_price', oi.unit_price,
+          'serial_number', oi.serial_number,
+          'barcode_value', oi.barcode_value
+        ) ORDER BY oi.created_at
+      ) as order_items
     FROM software_orders o
     LEFT JOIN users u ON o.buyer_user_id = u.id
     LEFT JOIN software_payments p ON o.id = p.software_order_id
     LEFT JOIN software_order_items oi ON o.id = oi.order_id
+    LEFT JOIN software_plans pl ON oi.software_plan_id = pl.id
+    LEFT JOIN software_products prod ON pl.software_product_id = prod.id
+    LEFT JOIN software_brands b ON prod.brand_id = b.id
+    LEFT JOIN software_categories c ON prod.category_id = c.id
     ${whereClause}
-    GROUP BY o.id, u.email, u.role, p.payment_type, p.status, p.paid_at
+    GROUP BY o.id, u.email, u.full_name, u.role, p.id, p.payment_type, p.status, p.amount, p.paid_at
     ORDER BY o.created_at DESC
     LIMIT $${paramIndex} OFFSET $${paramIndex + 1};
   `;

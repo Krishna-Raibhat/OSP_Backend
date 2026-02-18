@@ -38,7 +38,7 @@ export function authMiddleware(
   }
 }
 
-// Optional auth middleware (doesn't fail if no token)
+// Optional auth middleware - doesn't fail if no token
 export function optionalAuthMiddleware(
   req: Request,
   _res: Response,
