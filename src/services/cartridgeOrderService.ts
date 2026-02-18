@@ -1,6 +1,6 @@
 import { pool } from "../config/db";
 import { HttpError } from "../utils/errors";
-import type { CartridgeOrderUpdated } from "../models/cartridgeModels";
+import type { CartridgeOrder } from "../models/cartridgeModels";
 
 /* ==================== CARTRIDGE ORDER SERVICES ==================== */
 
@@ -58,7 +58,7 @@ export async function createOrder(input: CreateOrderInput) {
       RETURNING *;
     `;
 
-    const orderResult = await client.query<CartridgeOrderUpdated>(orderQuery, [
+    const orderResult = await client.query<CartridgeOrder>(orderQuery, [
       user_id || null,
       billing_info.full_name,
       billing_info.email,
@@ -289,7 +289,7 @@ export async function updateOrderStatus(order_id: string, status: "pending" | "p
     RETURNING *;
   `;
 
-  const result = await pool.query<CartridgeOrderUpdated>(q, [status, order_id]);
+  const result = await pool.query<CartridgeOrder>(q, [status, order_id]);
 
   if (!result.rows[0]) {
     throw new HttpError(404, "Order not found.");

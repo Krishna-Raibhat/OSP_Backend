@@ -40,51 +40,7 @@ export type CartridgeProductQR = {
   updated_at: string;
 };
 
-export type CartridgeInventoryUnit = {
-  id: string;
-  cartridge_product_id: string;
-  serial_number: string;
-  barcode_value: string;
-  status: "in_stock" | "reserved" | "sold";
-  sold_order_id: string | null;
-  sold_to_user_id: string | null;
-  sold_at: string | null;
-  created_at: string;
-  updated_at: string;
-};
-
-export type CartridgeOrder = {
-  id: string;
-  buyer_user_id: string;
-  status: "pending" | "paid" | "failed" | "cancelled";
-  total: number;
-  created_at: string;
-  updated_at: string;
-};
-
-export type CartridgeOrderItem = {
-  id: string;
-  order_id: string;
-  cartridge_product_id: string;
-  quantity: number;
-  unit_price: number;
-};
-
-export type CartridgePayment = {
-  id: string;
-  cartridge_order_id: string;
-  payment_type: "gateway" | "manual" | "cod";
-  gateway: string | null;
-  gateway_txn_id: string | null;
-  manual_reference: string | null;
-  amount: number;
-  status: "initiated" | "success" | "failed" | "pending";
-  paid_at: string | null;
-  created_at: string;
-  updated_at: string;
-};
-
-// Cart models (same as software)
+// Cart models
 export type CartridgeCart = {
   id: string;
   user_id: string;
@@ -103,8 +59,8 @@ export type CartridgeCartItem = {
   updated_at: string;
 };
 
-// Updated order model (with billing info for guest checkout)
-export type CartridgeOrderUpdated = {
+// Order models (with billing info for guest checkout)
+export type CartridgeOrder = {
   id: string;
   buyer_user_id: string | null; // Nullable for guest orders
   
@@ -116,6 +72,30 @@ export type CartridgeOrderUpdated = {
   
   status: "pending" | "paid" | "failed" | "cancelled";
   total: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CartridgeOrderItem = {
+  id: string;
+  order_id: string;
+  cartridge_product_id: string;
+  quantity: number;
+  unit_price: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CartridgePayment = {
+  id: string;
+  cartridge_order_id: string;
+  payment_type: "gateway" | "manual" | "cod";
+  gateway: string | null;
+  gateway_txn_id: string | null;
+  manual_reference: string | null;
+  amount: number;
+  status: "initiated" | "success" | "failed" | "pending";
+  paid_at: string | null;
   created_at: string;
   updated_at: string;
 };

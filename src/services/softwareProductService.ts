@@ -1,5 +1,6 @@
 import { pool } from "../config/db";
 import { HttpError, isPgUniqueViolation } from "../utils/errors";
+import { getS3Url } from "../utils/s3Upload";
 import type { SoftwareProduct } from "../models/softwareModels";
 
 export async function createProduct(input: {
@@ -42,7 +43,7 @@ export async function getAllProducts() {
     SELECT 
       p.*,
       b.name as brand_name,
-      b.image_url as brand_image_url,
+      b.thumbnail_url as brand_thumbnail_url,
       c.name as category_name
     FROM software_products p
     JOIN software_brands b ON p.brand_id = b.id
@@ -50,7 +51,12 @@ export async function getAllProducts() {
     ORDER BY p.created_at DESC;
   `;
   const result = await pool.query(q);
-  return result.rows;
+  
+  // Convert S3 paths to full URLs
+  return result.rows.map(product => ({
+    ...product,
+    brand_thumbnail_url: product.brand_thumbnail_url ? getS3Url(product.brand_thumbnail_url) : null,
+  }));
 }
 
 export async function getProductById(id: string) {
@@ -58,7 +64,7 @@ export async function getProductById(id: string) {
     SELECT 
       p.*,
       b.name as brand_name,
-      b.image_url as brand_image_url,
+      b.thumbnail_url as brand_thumbnail_url,
       c.name as category_name
     FROM software_products p
     JOIN software_brands b ON p.brand_id = b.id
@@ -67,7 +73,12 @@ export async function getProductById(id: string) {
   `;
   const result = await pool.query(q, [id]);
   if (!result.rows[0]) throw new HttpError(404, "Product not found.");
-  return result.rows[0];
+  
+  const product = result.rows[0];
+  return {
+    ...product,
+    brand_thumbnail_url: product.brand_thumbnail_url ? getS3Url(product.brand_thumbnail_url) : null,
+  };
 }
 
 export async function getProductsByBrand(brand_id: string) {
@@ -75,7 +86,7 @@ export async function getProductsByBrand(brand_id: string) {
     SELECT 
       p.*,
       b.name as brand_name,
-      b.image_url as brand_image_url,
+      b.thumbnail_url as brand_thumbnail_url,
       c.name as category_name
     FROM software_products p
     JOIN software_brands b ON p.brand_id = b.id
@@ -84,7 +95,12 @@ export async function getProductsByBrand(brand_id: string) {
     ORDER BY p.name ASC;
   `;
   const result = await pool.query(q, [brand_id]);
-  return result.rows;
+  
+  // Convert S3 paths to full URLs
+  return result.rows.map(product => ({
+    ...product,
+    brand_thumbnail_url: product.brand_thumbnail_url ? getS3Url(product.brand_thumbnail_url) : null,
+  }));
 }
 
 export async function updateProduct(input: {

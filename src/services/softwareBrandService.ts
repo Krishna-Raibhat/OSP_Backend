@@ -20,7 +20,6 @@ export async function createBrand(input: { name?: string; thumbnail_url?: string
     return {
       ...brand,
       thumbnail_url: brand.thumbnail_url ? getS3Url(brand.thumbnail_url) : null,
-      original_url: brand.original_url ? getS3Url(brand.original_url) : null,
     };
   } catch (err: any) {
     if (isPgUniqueViolation(err)) {
@@ -34,11 +33,10 @@ export async function getAllBrands() {
   const q = `SELECT * FROM software_brands ORDER BY name ASC;`;
   const result = await pool.query<SoftwareBrand>(q);
   
-  // Add full S3 URLs for admin view
+  // Add full S3 URLs for thumbnail only
   return result.rows.map(brand => ({
     ...brand,
     thumbnail_url: brand.thumbnail_url ? getS3Url(brand.thumbnail_url) : null,
-    original_url: brand.original_url ? getS3Url(brand.original_url) : null,
   }));
 }
 
@@ -51,7 +49,6 @@ export async function getBrandById(id: string) {
   return {
     ...brand,
     thumbnail_url: brand.thumbnail_url ? getS3Url(brand.thumbnail_url) : null,
-    original_url: brand.original_url ? getS3Url(brand.original_url) : null,
   };
 }
 
@@ -101,7 +98,6 @@ export async function updateBrand(input: { id: string; name?: string; thumbnail_
     return {
       ...brand,
       thumbnail_url: brand.thumbnail_url ? getS3Url(brand.thumbnail_url) : null,
-      original_url: brand.original_url ? getS3Url(brand.original_url) : null,
     };
   } catch (err: any) {
     if (err instanceof HttpError) throw err;
