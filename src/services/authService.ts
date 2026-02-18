@@ -224,6 +224,36 @@ export async function changePassword(input: {
   return { message: "Password changed successfully." };
 }
 
+/* ---------- GET ALL USERS BY ROLE ---------- */
+export async function getUsersByRole(role?: string) {
+  let q = `
+    SELECT id, full_name, phone, email, role, status, created_at, updated_at
+    FROM users
+  `;
+  
+  const params: any[] = [];
+  
+  if (role) {
+    q += ` WHERE role = $1`;
+    params.push(role);
+  }
+  
+  q += ` ORDER BY created_at DESC;`;
+  
+  const result = await pool.query<UserRow>(q, params);
+  
+  return result.rows.map(user => ({
+    id: user.id,
+    full_name: user.full_name,
+    email: user.email,
+    phone: user.phone,
+    role: user.role,
+    status: user.status,
+    created_at: user.created_at,
+    updated_at: user.updated_at,
+  }));
+}
+
 /* ---------- UPDATE PROFILE ---------- */
 export async function updateUserProfile(input: {
   userId: string;
