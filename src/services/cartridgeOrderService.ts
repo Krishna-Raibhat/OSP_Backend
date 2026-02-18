@@ -76,9 +76,11 @@ export async function createOrder(input: CreateOrderInput) {
           order_id,
           cartridge_product_id,
           quantity,
-          unit_price
+          unit_price,
+          serial_number,
+          barcode_value
         )
-        VALUES ($1, $2, $3, $4)
+        VALUES ($1, $2, $3, $4, NULL, NULL)
         RETURNING *;
       `;
 
@@ -407,6 +409,8 @@ export async function getOrderDetailsAdmin(order_id: string) {
       oi.cartridge_product_id,
       oi.quantity,
       oi.unit_price,
+      oi.serial_number,
+      oi.barcode_value,
       oi.created_at,
       p.product_name,
       p.model_number,
@@ -428,6 +432,46 @@ export async function getOrderDetailsAdmin(order_id: string) {
     items: itemsResult.rows,
     summary: {
       total_items: itemsResult.rows.reduce((sum: number, item: any) => sum + item.quantity, 0),
+      items_with_codes: itemsResult.rows.filter((item: any) => item.serial_number).length,
+      items_without_codes: itemsResult.rows.filter((item: any) => !item.serial_number).length,
     }
   };
+}
+
+// Generate serial numbers and barcodes after payment
+export async function generateCartridgeCodes(order_id: string) {
+  // Get all order items without serial numbers
+  const itemsQuery = `
+    SELECT 
+      oi.id, 
+      oi.cartridge_product_id,
+      oi.quantity
+    FROM cartridge_order_items oi
+    WHERE oi.order_id = $1 AND oi.serial_number IS NULL;
+  `;
+
+  const itemsResult = await pool.query(itemsQuery, [order_id]);
+
+  for (const item of itemsResult.rows) {
+    // Generate unique serial and barcode for each item
+    const serial = `CART-SN-${Date.now()}-${Math.random().toString(36).substring(2, 11).toUpperCase()}`;
+    const barcode = `CART-BC-${Date.now()}-${Math.random().toString(36).substring(2, 11).toUpperCase()}`;
+
+    const updateQuery = `
+      UPDATE cartridge_order_items 
+      SET 
+        serial_number = $1,
+        barcode_value = $2,
+        updated_at = NOW()
+      WHERE id = $3;
+    `;
+
+    await pool.query(updateQuery, [
+      serial,
+      barcode,
+      item.id,
+    ]);
+  }
+
+  return { message: "Cartridge codes generated successfully." };
 }

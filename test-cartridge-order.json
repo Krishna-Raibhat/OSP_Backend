@@ -1,0 +1,16 @@
+{
+  "billing_info": {
+    "full_name": "Test Guest",
+    "email": "testguest@example.com",
+    "phone": "1234567890",
+    "address": "123 Test Street"
+  },
+  "items": [
+    {
+      "cartridge_product_id": "d278c31b-95d5-4fa8-9480-051d81dab01b",
+      "quantity": 2,
+      "unit_price": 100.00
+    }
+  ],
+  "payment_method": "cod"
+}
