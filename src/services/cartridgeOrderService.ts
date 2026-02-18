@@ -440,8 +440,18 @@ export async function getOrderDetailsAdmin(order_id: string) {
     itemsResult.rows.map(async (item: any) => {
       if (item.serial_number) {
         try {
-          // Parse serial numbers (stored as JSON array)
-          const serialNumbers = JSON.parse(item.serial_number);
+          // Try to parse as JSON array, if it fails treat as single string
+          let serialNumbers;
+          try {
+            serialNumbers = JSON.parse(item.serial_number);
+            // If it's not an array, wrap it in an array
+            if (!Array.isArray(serialNumbers)) {
+              serialNumbers = [serialNumbers];
+            }
+          } catch {
+            // If JSON parse fails, it's a plain string - wrap it in an array
+            serialNumbers = [item.serial_number];
+          }
           
           // Generate barcode for each serial number with customer name
           const barcodes = await Promise.all(
@@ -471,7 +481,7 @@ export async function getOrderDetailsAdmin(order_id: string) {
             serial_number: undefined, // Remove raw field
           };
         } catch (error) {
-          console.error(`Failed to parse serial numbers for item ${item.id}:`, error);
+          console.error(`Failed to process serial numbers for item ${item.id}:`, error);
           return {
             ...item,
             serial_numbers: [],
