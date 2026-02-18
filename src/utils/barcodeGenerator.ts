@@ -1,16 +1,25 @@
 import bwipjs from "bwip-js";
 
 /**
- * Generate barcode image as base64 data URL from serial number
+ * Generate barcode image as base64 data URL from serial number and customer name
  * @param serialNumber - The serial number to encode
+ * @param customerName - Optional customer name to include in barcode
  * @returns Base64 data URL of the barcode image
  */
-export async function generateBarcodeImage(serialNumber: string): Promise<string> {
+export async function generateBarcodeImage(
+  serialNumber: string,
+  customerName?: string
+): Promise<string> {
   try {
+    // Combine serial number with customer name if provided
+    const barcodeText = customerName 
+      ? `${serialNumber}|${customerName}` 
+      : serialNumber;
+
     // Generate Code128 barcode (supports alphanumeric)
     const png = await bwipjs.toBuffer({
       bcid: "code128",       // Barcode type
-      text: serialNumber,    // Text to encode
+      text: barcodeText,     // Text to encode (serial + name)
       scale: 3,              // 3x scaling factor
       height: 10,            // Bar height, in millimeters
       includetext: true,     // Show human-readable text

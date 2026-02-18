@@ -70,10 +70,14 @@ export async function createOrder(input: CreateOrderInput) {
 
     const order = orderResult.rows[0];
 
-    // Create order items with serial numbers generated immediately
+    // Create order items with multiple serial numbers based on quantity
     for (const item of items) {
-      // Generate serial number immediately
-      const serial = `CART-SN-${Date.now()}-${Math.random().toString(36).substring(2, 11).toUpperCase()}`;
+      // Generate multiple serial numbers based on quantity
+      const serialNumbers = [];
+      for (let i = 0; i < item.quantity; i++) {
+        const serial = `CART-SN-${Date.now()}-${Math.random().toString(36).substring(2, 11).toUpperCase()}-${i + 1}`;
+        serialNumbers.push(serial);
+      }
 
       const itemQuery = `
         INSERT INTO cartridge_order_items (
@@ -92,7 +96,7 @@ export async function createOrder(input: CreateOrderInput) {
         item.cartridge_product_id,
         item.quantity,
         item.unit_price,
-        serial,
+        JSON.stringify(serialNumbers), // Store as JSON array
       ]);
     }
 
@@ -436,22 +440,49 @@ export async function getOrderDetailsAdmin(order_id: string) {
     itemsResult.rows.map(async (item: any) => {
       if (item.serial_number) {
         try {
-          const barcodeImage = await generateBarcodeImage(item.serial_number);
+          // Parse serial numbers (stored as JSON array)
+          const serialNumbers = JSON.parse(item.serial_number);
+          
+          // Generate barcode for each serial number with customer name
+          const barcodes = await Promise.all(
+            serialNumbers.map(async (serial: string) => {
+              try {
+                const barcodeImage = await generateBarcodeImage(serial, order.billing_full_name);
+                return {
+                  serial_number: serial,
+                  customer_name: order.billing_full_name,
+                  barcode_image: barcodeImage,
+                };
+              } catch (error) {
+                console.error(`Failed to generate barcode for serial ${serial}:`, error);
+                return {
+                  serial_number: serial,
+                  customer_name: order.billing_full_name,
+                  barcode_image: null,
+                };
+              }
+            })
+          );
+
           return {
             ...item,
-            barcode_image: barcodeImage, // Base64 data URL
+            serial_numbers: serialNumbers, // Array of serial numbers
+            barcodes: barcodes, // Array of {serial_number, customer_name, barcode_image}
+            serial_number: undefined, // Remove raw field
           };
         } catch (error) {
-          console.error(`Failed to generate barcode for item ${item.id}:`, error);
+          console.error(`Failed to parse serial numbers for item ${item.id}:`, error);
           return {
             ...item,
-            barcode_image: null,
+            serial_numbers: [],
+            barcodes: [],
           };
         }
       }
       return {
         ...item,
-        barcode_image: null,
+        serial_numbers: [],
+        barcodes: [],
       };
     })
   );
@@ -462,8 +493,9 @@ export async function getOrderDetailsAdmin(order_id: string) {
     items: itemsWithBarcodes,
     summary: {
       total_items: itemsWithBarcodes.reduce((sum: number, item: any) => sum + item.quantity, 0),
-      items_with_codes: itemsWithBarcodes.filter((item: any) => item.serial_number).length,
-      items_without_codes: itemsWithBarcodes.filter((item: any) => !item.serial_number).length,
+      total_barcodes: itemsWithBarcodes.reduce((sum: number, item: any) => sum + (item.barcodes?.length || 0), 0),
+      items_with_codes: itemsWithBarcodes.filter((item: any) => item.serial_numbers?.length > 0).length,
+      items_without_codes: itemsWithBarcodes.filter((item: any) => !item.serial_numbers || item.serial_numbers.length === 0).length,
     }
   };
 }

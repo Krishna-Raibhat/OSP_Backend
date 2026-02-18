@@ -84,8 +84,9 @@ export type CartridgeOrderItem = {
   unit_price: number;
   
   // Generated after payment confirmation
-  // Barcode is generated dynamically from serial_number (not stored)
-  serial_number: string | null;
+  // Stored as JSON array of serial numbers (one per quantity)
+  // Barcodes are generated dynamically from serial numbers (not stored)
+  serial_number: string | null; // JSON array: ["CART-SN-...", "CART-SN-..."]
   
   created_at: string;
   updated_at: string;

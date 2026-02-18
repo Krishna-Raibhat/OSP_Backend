@@ -441,21 +441,24 @@ export async function getOrderDetailsAdmin(order_id: string) {
     itemsResult.rows.map(async (item: any) => {
       if (item.serial_number) {
         try {
-          const barcodeImage = await generateBarcodeImage(item.serial_number);
+          const barcodeImage = await generateBarcodeImage(item.serial_number, order.billing_full_name);
           return {
             ...item,
+            customer_name: order.billing_full_name,
             barcode_image: barcodeImage, // Base64 data URL
           };
         } catch (error) {
           console.error(`Failed to generate barcode for item ${item.id}:`, error);
           return {
             ...item,
+            customer_name: order.billing_full_name,
             barcode_image: null,
           };
         }
       }
       return {
         ...item,
+        customer_name: order.billing_full_name,
         barcode_image: null,
       };
     })
