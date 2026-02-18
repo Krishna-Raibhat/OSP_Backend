@@ -41,22 +41,36 @@ export type CartridgeProductQR = {
   updated_at: string;
 };
 
-export type CartridgeInventoryUnit = {
+// Cart models
+export type CartridgeCart = {
   id: string;
-  cartridge_product_id: string;
-  serial_number: string;
-  barcode_value: string;
-  status: "in_stock" | "reserved" | "sold";
-  sold_order_id: string | null;
-  sold_to_user_id: string | null;
-  sold_at: string | null;
+  user_id: string;
+  status: "active" | "checked_out";
   created_at: string;
   updated_at: string;
 };
 
+export type CartridgeCartItem = {
+  id: string;
+  cart_id: string;
+  cartridge_product_id: string;
+  unit_price: number;
+  quantity: number;
+  created_at: string;
+  updated_at: string;
+};
+
+// Order models (with billing info for guest checkout)
 export type CartridgeOrder = {
   id: string;
-  buyer_user_id: string;
+  buyer_user_id: string | null; // Nullable for guest orders
+  
+  // Billing information
+  billing_full_name: string;
+  billing_email: string;
+  billing_phone: string;
+  billing_address: string;
+  
   status: "pending" | "paid" | "failed" | "cancelled";
   total: number;
   created_at: string;
@@ -69,17 +83,25 @@ export type CartridgeOrderItem = {
   cartridge_product_id: string;
   quantity: number;
   unit_price: number;
+  
+  // Generated after payment confirmation
+  // Stored as JSON array of serial numbers (one per quantity)
+  // Barcodes are generated dynamically from serial numbers (not stored)
+  serial_number: string | null; // JSON array: ["CART-SN-...", "CART-SN-..."]
+  
+  created_at: string;
+  updated_at: string;
 };
 
 export type CartridgePayment = {
   id: string;
   cartridge_order_id: string;
-  payment_type: "gateway" | "manual";
+  payment_type: "gateway" | "manual" | "cod";
   gateway: string | null;
   gateway_txn_id: string | null;
   manual_reference: string | null;
   amount: number;
-  status: "initiated" | "success" | "failed";
+  status: "initiated" | "success" | "failed" | "pending";
   paid_at: string | null;
   created_at: string;
   updated_at: string;

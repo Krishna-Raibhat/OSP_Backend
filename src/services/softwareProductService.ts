@@ -1,5 +1,6 @@
 import { pool } from "../config/db";
 import { HttpError, isPgUniqueViolation } from "../utils/errors";
+import { getS3Url } from "../utils/s3Upload";
 import type { SoftwareProduct } from "../models/softwareModels";
 
 export async function createProduct(input: {
@@ -8,9 +9,8 @@ export async function createProduct(input: {
   name?: string;
   description?: string;
   is_active?: boolean;
-  created_by: string;
 }) {
-  const { brand_id, category_id, name, description, is_active = true, created_by } = input;
+  const { brand_id, category_id, name, description, is_active = true } = input;
 
   if (!brand_id) throw new HttpError(400, "Brand ID is required.");
   if (!category_id) throw new HttpError(400, "Category ID is required.");
@@ -18,8 +18,8 @@ export async function createProduct(input: {
 
   try {
     const q = `
-      INSERT INTO software_products (brand_id, category_id, name, description, is_active, created_by)
-      VALUES ($1, $2, $3, $4, $5, $6)
+      INSERT INTO software_products (brand_id, category_id, name, description, is_active)
+      VALUES ($1, $2, $3, $4, $5)
       RETURNING *;
     `;
     const result = await pool.query<SoftwareProduct>(q, [
@@ -28,7 +28,6 @@ export async function createProduct(input: {
       name.trim(),
       description ?? null,
       is_active,
-      created_by,
     ]);
     return result.rows[0];
   } catch (err: any) {
@@ -44,7 +43,7 @@ export async function getAllProducts() {
     SELECT 
       p.*,
       b.name as brand_name,
-      b.image_url as brand_image_url,
+      b.thumbnail_url as brand_thumbnail_url,
       c.name as category_name
     FROM software_products p
     JOIN software_brands b ON p.brand_id = b.id
@@ -52,6 +51,7 @@ export async function getAllProducts() {
     ORDER BY p.created_at DESC;
   `;
   const result = await pool.query(q);
+  
   return result.rows;
 }
 
@@ -60,7 +60,7 @@ export async function getProductById(id: string) {
     SELECT 
       p.*,
       b.name as brand_name,
-      b.image_url as brand_image_url,
+      b.thumbnail_url as brand_thumbnail_url,
       c.name as category_name
     FROM software_products p
     JOIN software_brands b ON p.brand_id = b.id
@@ -69,6 +69,7 @@ export async function getProductById(id: string) {
   `;
   const result = await pool.query(q, [id]);
   if (!result.rows[0]) throw new HttpError(404, "Product not found.");
+  
   return result.rows[0];
 }
 
@@ -77,7 +78,7 @@ export async function getProductsByBrand(brand_id: string) {
     SELECT 
       p.*,
       b.name as brand_name,
-      b.image_url as brand_image_url,
+      b.thumbnail_url as brand_thumbnail_url,
       c.name as category_name
     FROM software_products p
     JOIN software_brands b ON p.brand_id = b.id
@@ -86,6 +87,7 @@ export async function getProductsByBrand(brand_id: string) {
     ORDER BY p.name ASC;
   `;
   const result = await pool.query(q, [brand_id]);
+  
   return result.rows;
 }
 

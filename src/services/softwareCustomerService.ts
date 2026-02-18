@@ -1,13 +1,15 @@
 import { pool } from "../config/db";
 import { HttpError } from "../utils/errors";
+import { getS3Url } from "../utils/s3Upload";
 import type { SoftwareBrand, SoftwareProduct, SoftwarePlan } from "../models/softwareModels";
 
 /* ==================== CUSTOMER FACING SERVICES ==================== */
 
 // Get all active brands for customers
 export async function getActiveBrands() {
-  const q = `SELECT id, name, image_url FROM software_brands WHERE is_active = true ORDER BY name ASC;`;
+  const q = `SELECT id, name, thumbnail_url FROM software_brands WHERE is_active = true ORDER BY name ASC;`;
   const result = await pool.query<SoftwareBrand>(q);
+  
   return result.rows;
 }
 
@@ -28,7 +30,7 @@ export async function getProductsByBrandForCustomer(brand_id: string, userRole?:
       p.name,
       p.description,
       b.name as brand_name,
-      b.image_url as brand_image_url,
+      b.thumbnail_url as brand_thumbnail_url,
       c.name as category_name
     FROM software_products p
     JOIN software_brands b ON p.brand_id = b.id
@@ -165,7 +167,7 @@ export async function getAllProductsForCustomer(userRole?: string) {
       p.name,
       p.description,
       b.name as brand_name,
-      b.image_url as brand_image_url,
+      b.thumbnail_url as brand_thumbnail_url,
       c.name as category_name
     FROM software_products p
     JOIN software_brands b ON p.brand_id = b.id

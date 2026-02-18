@@ -1,14 +1,42 @@
 import type { Request, Response } from "express";
 import { HttpError } from "../utils/errors";
-import { registerUser, loginUser, getUserProfile, changePassword, updateUserProfile } from "../services/authService";
+import { registerUser, loginUser, getUserProfile, changePassword, updateUserProfile, getUsersByRole } from "../services/authService";
 
+// Public registration - only allows 'user' role
 export async function register(req: Request, res: Response) {
   try {
-    const data = await registerUser(req.body);
+    // Force role to 'user' for public registration
+    const data = await registerUser({ ...req.body, role: "user" });
     return res.status(201).json({ message: "Registered successfully.", ...data });
   } catch (err: any) {
     if (err instanceof HttpError) return res.status(err.status).json({ message: err.message });
     console.error("Register error:", err);
+    return res.status(500).json({ message: "Server error." });
+  }
+}
+
+// Admin-only registration - allows creating distributors
+export async function registerDistributor(req: Request, res: Response) {
+  try {
+    // Force role to 'distributor'
+    const data = await registerUser({ ...req.body, role: "distributor" });
+    return res.status(201).json({ message: "Distributor registered successfully.", ...data });
+  } catch (err: any) {
+    if (err instanceof HttpError) return res.status(err.status).json({ message: err.message });
+    console.error("Register distributor error:", err);
+    return res.status(500).json({ message: "Server error." });
+  }
+}
+
+// Get all users or filter by role (admin only)
+export async function getAllUsers(req: Request, res: Response) {
+  try {
+    const { role } = req.query;
+    const users = await getUsersByRole(role as string);
+    return res.status(200).json(users);
+  } catch (err: any) {
+    if (err instanceof HttpError) return res.status(err.status).json({ message: err.message });
+    console.error("Get users error:", err);
     return res.status(500).json({ message: "Server error." });
   }
 }

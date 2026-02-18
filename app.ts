@@ -13,7 +13,15 @@ import cartridgeBrandRoutes from "./src/routes/cartridgeBrandRoutes";
 import cartridgeCategoryRoutes from "./src/routes/cartridgeCategoryRoutes";
 import cartridgeProductQrRoutes from "./src/routes/cartridgeProductQrRoutes";
 import softwareCustomerRoutes from "./src/routes/softwareCustomerRoutes";
+import softwareCartRoutes from "./src/routes/softwareCartRoutes";
+import softwareOrderRoutes from "./src/routes/softwareOrderRoutes";
+import softwarePaymentRoutes from "./src/routes/softwarePaymentRoutes";
 import cartridgeProductRoutes from "./src/routes/cartridgeProductRoutes";
+import cartridgeCartRoutes from "./src/routes/cartridgeCartRoutes";
+import cartridgeOrderRoutes from "./src/routes/cartridgeOrderRoutes";
+import cartridgePaymentRoutes from "./src/routes/cartridgePaymentRoutes";
+import barcodeLookupRoutes from "./src/routes/barcodeLookupRoutes";
+import activationRoutes from "./src/routes/activationRoutes";
 
 dotenv.config();
 
@@ -48,7 +56,15 @@ app.use("/api/cartridge/brands", cartridgeBrandRoutes);
 app.use("/api/cartridge/categories", cartridgeCategoryRoutes);
 app.use("/api/cartridge/products/qr", cartridgeProductQrRoutes);
 app.use("/api/shop", softwareCustomerRoutes);
+app.use("/api/cart", softwareCartRoutes);
+app.use("/api/orders", softwareOrderRoutes);
+app.use("/api/payments", softwarePaymentRoutes);
 app.use("/api/cartridge/products", cartridgeProductRoutes);
+app.use("/api/cartridge/cart", cartridgeCartRoutes);
+app.use("/api/cartridge/orders", cartridgeOrderRoutes);
+app.use("/api/cartridge/payments", cartridgePaymentRoutes);
+app.use("/api/barcode", barcodeLookupRoutes);
+app.use("/api/activation", activationRoutes);
 
 // Special nested routes
 import * as productController from "./src/controllers/softwareProductController";
