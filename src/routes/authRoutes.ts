@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { login, register, registerDistributor, getAllUsers, getProfile, updatePassword, updateProfile } from "../controllers/authController";
 import { authMiddleware } from "../middlewares/authMiddleware";
-import { roleMiddleware } from "../middlewares/roleMiddleware";
+import { requireAdmin } from "../middlewares/roleMiddleware";
 
 const router = Router();
 
@@ -10,8 +10,8 @@ router.post("/register", register); // Only creates 'user' role
 router.post("/login", login);
 
 // Admin-only routes
-router.post("/register-distributor", authMiddleware, roleMiddleware(["admin"]), registerDistributor);
-router.get("/users", authMiddleware, roleMiddleware(["admin"]), getAllUsers); // Get all users or filter by role
+router.post("/register-distributor", authMiddleware, requireAdmin, registerDistributor);
+router.get("/users", authMiddleware, requireAdmin, getAllUsers); // Get all users or filter by role
 
 // Protected routes
 router.get("/profile", authMiddleware, getProfile);
