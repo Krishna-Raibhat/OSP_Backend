@@ -37,6 +37,9 @@ export type SoftwarePlan = {
   price: number;
   special_price: number | null;
   features: string | null;
+  activation_key: string | null; // Admin sets this
+  start_date: string | null; // Admin sets this
+  expiry_date: string | null; // Admin sets this
   is_active: boolean;
   created_at: string;
   updated_at: string;

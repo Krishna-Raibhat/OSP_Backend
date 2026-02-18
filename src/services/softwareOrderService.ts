@@ -2,6 +2,7 @@ import { pool } from "../config/db";
 import { HttpError } from "../utils/errors";
 import type { SoftwareOrder, SoftwareOrderItem, SoftwareCartItem } from "../models/softwareModels";
 import { generateBarcodeImage } from "../utils/barcodeGenerator";
+import { sendOrderConfirmationEmail } from "../utils/emailService";
 
 /* ==================== ORDER SERVICES ==================== */
 
@@ -74,7 +75,7 @@ export async function createOrder(input: CreateOrderInput) {
     for (const item of items) {
       // Create multiple rows based on quantity (1 row = 1 license)
       for (let i = 0; i < item.quantity; i++) {
-        // Generate serial number immediately (barcode generated on-demand)
+        // Generate serial number immediately
         const serial = `SN-${Date.now()}-${Math.random().toString(36).substring(2, 11).toUpperCase()}`;
 
         const itemQuery = `
@@ -152,6 +153,42 @@ export async function createOrder(input: CreateOrderInput) {
     }
 
     await client.query("COMMIT");
+
+    // Send order confirmation email with serial numbers
+    try {
+      // Get order items with product details
+      const itemsQuery = `
+        SELECT 
+          oi.serial_number,
+          oi.unit_price,
+          pl.plan_name,
+          p.name as product_name
+        FROM software_order_items oi
+        JOIN software_plans pl ON oi.software_plan_id = pl.id
+        JOIN software_products p ON pl.software_product_id = p.id
+        WHERE oi.order_id = $1;
+      `;
+      const itemsResult = await pool.query(itemsQuery, [order.id]);
+      
+      const orderItems = itemsResult.rows.map(item => ({
+        productName: item.product_name,
+        planName: item.plan_name,
+        serialNumber: item.serial_number,
+        price: item.unit_price,
+      }));
+
+      await sendOrderConfirmationEmail({
+        customerEmail: billing_info.email,
+        customerName: billing_info.full_name,
+        orderId: order.id,
+        orderItems,
+        total: total.toString(),
+        activationLink: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/activation`,
+      });
+    } catch (emailError) {
+      console.error("Failed to send order confirmation email:", emailError);
+      // Don't fail the order if email fails
+    }
 
     return { order, payment };
   } catch (error) {
