@@ -2,10 +2,26 @@ import type { Request, Response } from "express";
 import { HttpError } from "../utils/errors";
 import * as qrService from "../services/cartridgeProductQrService";
 import { CartridgeProduct } from "../models/cartridgeModels";
+import QRCode from "qrcode";
+import * as saveImg from "../utils/folderUpload"
 
 export async function generateQrCode(product: CartridgeProduct) {
   try {
-    const data = await qrService.generateProductQR(product);
+    const productId = product.id;
+    if (!productId) {
+      throw new HttpError(400, "Product ID is required to generate QR code.");
+    }
+    const scanUrl = `${process.env.BASE_URL}/services?productId=${productId}`;
+    const qrBuffer = await QRCode.toBuffer(scanUrl, { type: "png" ,width: 300,});
+
+    const multerFile: Express.Multer.File = {
+      fieldname: "qrCode",
+      buffer: qrBuffer,
+      originalname: `product_${productId}_qr.png`,} as Express.Multer.File;
+
+    const { originalPath } = await saveImg.uploadProductQRToFolder(multerFile, productId);
+
+    const data = await qrService.generateProductQR(product.id, originalPath);
     return data;
   } catch (err: any) {
     return err;
@@ -81,11 +97,11 @@ export async function getAllQrCodes(req: Request, res: Response) {
   }
 }
 
-export async function updateQrCode(product: CartridgeProduct) {
-  try {
-    const data = await qrService.updateProductQR(product);
-    return data;
-  } catch (err: any) {
-    return err;
-  }
-}
+// export async function updateQrCode(product: CartridgeProduct) {
+//   try {
+//     const data = await qrService.updateProductQR(product);
+//     return data;
+//   } catch (err: any) {
+//     return err;
+//   }
+// }
