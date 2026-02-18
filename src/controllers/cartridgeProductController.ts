@@ -39,7 +39,7 @@ import { validate as isUUID } from "uuid";
 
 export async function createProduct(req: Request, res: Response) {
     try {
-        const { brand_name, category_name, product_name, model_number, unit_price } = req.body;
+        const { brand_id, brand_name, category_id, category_name, product_name, model_number, unit_price } = req.body;
 
         // Validate required fields
         if (!brand_name || !category_name || !product_name || !model_number || unit_price === undefined) {
@@ -51,22 +51,58 @@ export async function createProduct(req: Request, res: Response) {
             return res.status(400).json({ message: "Invalid user ID format. ID must be a valid UUID." });
         }
 
-        // Lookup brand and category IDs from names
-        const brand = await CartridgeBrandService.getBrandByName(brand_name);
-        if (!brand) {
-            return res.status(404).json({ message: `Brand '${brand_name}' not found.` });
+        let resolvedBrandId: string | undefined;
+        let resolvedCategoryId: string | undefined;
+
+        // -------- Resolve Brand --------
+        if (brand_id) {
+            if (!isUUID(brand_id)) {
+                return res.status(400).json({
+                    message: "Invalid brand_id format. ID must be a valid UUID."
+                });
+            }
+            resolvedBrandId = brand_id;
+        } else if (brand_name) {
+            const brand = await CartridgeBrandService.getBrandByName(brand_name);
+            if (!brand) {
+                return res.status(404).json({
+                    message: `Brand '${brand_name}' not found.`
+                });
+            }
+            resolvedBrandId = brand.id;
+        } else {
+            return res.status(400).json({
+                message: "Provide either brand_id or brand_name."
+            });
         }
 
-        const category = await categoryService.getCategoryByName(category_name);
-        if (!category) {
-            return res.status(404).json({ message: `Category '${category_name}' not found.` });
+        // -------- Resolve Category --------
+        if (category_id) {
+            if (!isUUID(category_id)) {
+                return res.status(400).json({
+                    message: "Invalid category_id format. ID must be a valid UUID."
+                });
+            }
+            resolvedCategoryId = category_id;
+        } else if (category_name) {
+            const category = await categoryService.getCategoryByName(category_name);
+            if (!category) {
+                return res.status(404).json({
+                    message: `Category '${category_name}' not found.`
+                });
+            }
+            resolvedCategoryId = category.id;
+        } else {
+            return res.status(400).json({
+                message: "Provide either category_id or category_name."
+            });
         }
 
         // Replace names with IDs for insertion
         const productPayload = {
             ...req.body,
-            brand_id: brand.id,
-            category_id: category.id
+            brand_id: resolvedBrandId,
+            category_id: resolvedCategoryId
         };
 
         const product: CartridgeProduct = await productService.createCartridgeProduct(productPayload, req.user?.userId);
