@@ -4,16 +4,16 @@ import type { CartridgeBrand } from "../models/cartridgeModels";
 
 export const CartridgeBrandService = {
 
-  async createCartridgeBrand(name: string, img_url?: string) {
+  async createCartridgeBrand(name: string, img_url?: string, is_active?: boolean) {
     if (!name) throw new HttpError(400, "Brand name is required.");
 
     try {
       const q = `
-        INSERT INTO cartridge_brands (name, img_url)
-        VALUES ($1, $2)
+        INSERT INTO cartridge_brands (name, img_url, is_active)
+        VALUES ($1, $2, $3)
         RETURNING *;
       `;
-      const result = await pool.query<CartridgeBrand>(q, [name.trim(), img_url ?? null]);
+      const result = await pool.query<CartridgeBrand>(q, [name.trim(), img_url ?? null, is_active ?? true]);
       return result.rows[0];
     } catch (err: any) {
       if (isPgUniqueViolation(err)) {
