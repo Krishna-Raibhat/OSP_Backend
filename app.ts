@@ -21,6 +21,7 @@ import cartridgeCartRoutes from "./src/routes/cartridgeCartRoutes";
 import cartridgeOrderRoutes from "./src/routes/cartridgeOrderRoutes";
 import cartridgePaymentRoutes from "./src/routes/cartridgePaymentRoutes";
 import barcodeLookupRoutes from "./src/routes/barcodeLookupRoutes";
+import activationRoutes from "./src/routes/activationRoutes";
 
 dotenv.config();
 
@@ -63,6 +64,7 @@ app.use("/api/cartridge/cart", cartridgeCartRoutes);
 app.use("/api/cartridge/orders", cartridgeOrderRoutes);
 app.use("/api/cartridge/payments", cartridgePaymentRoutes);
 app.use("/api/barcode", barcodeLookupRoutes);
+app.use("/api/activation", activationRoutes);
 
 // Special nested routes
 import * as productController from "./src/controllers/softwareProductController";

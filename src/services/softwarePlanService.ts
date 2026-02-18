@@ -9,6 +9,9 @@ export async function createPlan(input: {
   price?: number;
   special_price?: number;
   features?: string;
+  activation_key?: string;
+  start_date?: string;
+  expiry_date?: string;
   is_active?: boolean;
 }) {
   const {
@@ -18,6 +21,9 @@ export async function createPlan(input: {
     price,
     special_price,
     features,
+    activation_key,
+    start_date,
+    expiry_date,
     is_active = true,
   } = input;
 
@@ -27,8 +33,11 @@ export async function createPlan(input: {
   if (price === undefined || price === null) throw new HttpError(400, "Price is required.");
 
   const q = `
-    INSERT INTO software_plans (software_product_id, plan_name, duration_type, price, special_price, features, is_active)
-    VALUES ($1, $2, $3, $4, $5, $6, $7)
+    INSERT INTO software_plans (
+      software_product_id, plan_name, duration_type, price, special_price, 
+      features, activation_key, start_date, expiry_date, is_active
+    )
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
     RETURNING *;
   `;
   const result = await pool.query<SoftwarePlan>(q, [
@@ -38,6 +47,9 @@ export async function createPlan(input: {
     price,
     special_price ?? null,
     features ?? null,
+    activation_key ?? null,
+    start_date ?? null,
+    expiry_date ?? null,
     is_active,
   ]);
   return result.rows[0];
@@ -69,9 +81,12 @@ export async function updatePlan(input: {
   price?: number;
   special_price?: number;
   features?: string;
+  activation_key?: string;
+  start_date?: string;
+  expiry_date?: string;
   is_active?: boolean;
 }) {
-  const { id, plan_name, duration_type, price, special_price, features, is_active } = input;
+  const { id, plan_name, duration_type, price, special_price, features, activation_key, start_date, expiry_date, is_active } = input;
 
   if (
     !plan_name &&
@@ -79,6 +94,9 @@ export async function updatePlan(input: {
     price === undefined &&
     special_price === undefined &&
     features === undefined &&
+    activation_key === undefined &&
+    start_date === undefined &&
+    expiry_date === undefined &&
     is_active === undefined
   ) {
     throw new HttpError(400, "At least one field is required.");
@@ -107,6 +125,18 @@ export async function updatePlan(input: {
   if (features !== undefined) {
     updates.push(`features = $${paramIndex++}`);
     values.push(features ?? null);
+  }
+  if (activation_key !== undefined) {
+    updates.push(`activation_key = $${paramIndex++}`);
+    values.push(activation_key ?? null);
+  }
+  if (start_date !== undefined) {
+    updates.push(`start_date = $${paramIndex++}`);
+    values.push(start_date ?? null);
+  }
+  if (expiry_date !== undefined) {
+    updates.push(`expiry_date = $${paramIndex++}`);
+    values.push(expiry_date ?? null);
   }
   if (is_active !== undefined) {
     updates.push(`is_active = $${paramIndex++}`);

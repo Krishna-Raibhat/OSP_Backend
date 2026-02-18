@@ -99,11 +99,37 @@ export async function addToCart(input: {
 
   if (!plan) throw new HttpError(404, "Plan not found or inactive.");
 
-  // Determine price based on user role
+  // Determine base price based on user role
   const isDistributor = userRole === "distributor";
-  const unit_price = isDistributor && plan.special_price !== null 
+  let basePrice = isDistributor && plan.special_price !== null 
     ? plan.special_price 
     : plan.price;
+
+  // Calculate prorated price if expiry date is set
+  let unit_price = basePrice;
+  if (plan.expiry_date) {
+    const now = new Date();
+    const expiryDate = new Date(plan.expiry_date);
+    
+    // Only prorate if expiry is in the future
+    if (expiryDate > now) {
+      const startDate = plan.start_date ? new Date(plan.start_date) : now;
+      
+      // Calculate remaining months
+      const totalMonths = (expiryDate.getFullYear() - startDate.getFullYear()) * 12 + 
+                         (expiryDate.getMonth() - startDate.getMonth());
+      const remainingMonths = (expiryDate.getFullYear() - now.getFullYear()) * 12 + 
+                             (expiryDate.getMonth() - now.getMonth()) + 1; // +1 to include current month
+      
+      if (totalMonths > 0 && remainingMonths > 0 && remainingMonths < totalMonths) {
+        // Prorate the price based on remaining months
+        unit_price = (basePrice / totalMonths) * remainingMonths;
+        unit_price = Math.round(unit_price * 100) / 100; // Round to 2 decimals
+      }
+    } else {
+      throw new HttpError(400, "This plan has expired and cannot be purchased.");
+    }
+  }
 
   // Get or create cart
   const cart = await getOrCreateCart(user_id);
