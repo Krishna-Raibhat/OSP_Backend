@@ -107,3 +107,57 @@ export async function deleteBrand(req: Request, res: Response) {
     return res.status(500).json({ message: "Server error." });
   }
 }
+
+export async function getBrandImage(req: Request, res: Response) {
+  try {
+    const { S3Client, GetObjectCommand } = require("@aws-sdk/client-s3");
+    const { env } = require("../utils/env");
+    
+    const { path } = req.query;
+
+    if (!path || typeof path !== "string") {
+      return res.status(400).json({ message: "Image path is required." });
+    }
+
+    // Initialize S3 client
+    const s3Client = new S3Client({
+      region: env.AWS_REGION || "us-east-1",
+      credentials: {
+        accessKeyId: env.AWS_ACCESS_KEY_ID!,
+        secretAccessKey: env.AWS_SECRET_ACCESS_KEY!,
+      },
+      endpoint: env.AWS_ENDPOINT,
+      forcePathStyle: true,
+    });
+
+    // Get object from S3
+    const command = new GetObjectCommand({
+      Bucket: env.AWS_BUCKET_NAME!,
+      Key: path,
+    });
+
+    const response = await s3Client.send(command);
+
+    // Set content type
+    if (response.ContentType) {
+      res.setHeader("Content-Type", response.ContentType);
+    }
+
+    // Set cache headers (cache for 1 year)
+    res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+
+    // Stream the image
+    if (response.Body) {
+      const stream = response.Body as any;
+      stream.pipe(res);
+    } else {
+      return res.status(404).json({ message: "Image not found." });
+    }
+  } catch (err: any) {
+    console.error("Get brand image error:", err);
+    if (err.name === "NoSuchKey") {
+      return res.status(404).json({ message: "Image not found." });
+    }
+    return res.status(500).json({ message: "Server error." });
+  }
+}

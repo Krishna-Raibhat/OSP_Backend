@@ -10,11 +10,7 @@ export async function getActiveBrands() {
   const q = `SELECT id, name, thumbnail_url FROM software_brands WHERE is_active = true ORDER BY name ASC;`;
   const result = await pool.query<SoftwareBrand>(q);
   
-  // Add full S3 URLs
-  return result.rows.map(brand => ({
-    ...brand,
-    thumbnail_url: brand.thumbnail_url ? getS3Url(brand.thumbnail_url) : null,
-  }));
+  return result.rows;
 }
 
 // Get all active categories for customers
@@ -52,7 +48,6 @@ export async function getProductsByBrandForCustomer(brand_id: string, userRole?:
       const plans = await getPlansByProductForCustomer(product.id, userRole);
       return {
         ...product,
-        brand_thumbnail_url: product.brand_thumbnail_url ? getS3Url(product.brand_thumbnail_url) : null,
         plans,
       };
     })
@@ -189,7 +184,6 @@ export async function getAllProductsForCustomer(userRole?: string) {
       const plans = await getPlansByProductForCustomer(product.id, userRole);
       return {
         ...product,
-        brand_thumbnail_url: product.brand_thumbnail_url ? getS3Url(product.brand_thumbnail_url) : null,
         plans,
       };
     })

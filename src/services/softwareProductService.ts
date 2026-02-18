@@ -52,11 +52,7 @@ export async function getAllProducts() {
   `;
   const result = await pool.query(q);
   
-  // Convert S3 paths to full URLs
-  return result.rows.map(product => ({
-    ...product,
-    brand_thumbnail_url: product.brand_thumbnail_url ? getS3Url(product.brand_thumbnail_url) : null,
-  }));
+  return result.rows;
 }
 
 export async function getProductById(id: string) {
@@ -74,11 +70,7 @@ export async function getProductById(id: string) {
   const result = await pool.query(q, [id]);
   if (!result.rows[0]) throw new HttpError(404, "Product not found.");
   
-  const product = result.rows[0];
-  return {
-    ...product,
-    brand_thumbnail_url: product.brand_thumbnail_url ? getS3Url(product.brand_thumbnail_url) : null,
-  };
+  return result.rows[0];
 }
 
 export async function getProductsByBrand(brand_id: string) {
@@ -96,11 +88,7 @@ export async function getProductsByBrand(brand_id: string) {
   `;
   const result = await pool.query(q, [brand_id]);
   
-  // Convert S3 paths to full URLs
-  return result.rows.map(product => ({
-    ...product,
-    brand_thumbnail_url: product.brand_thumbnail_url ? getS3Url(product.brand_thumbnail_url) : null,
-  }));
+  return result.rows;
 }
 
 export async function updateProduct(input: {

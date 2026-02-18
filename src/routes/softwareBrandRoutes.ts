@@ -6,6 +6,7 @@ import * as brandController from "../controllers/softwareBrandController";
 
 const router = Router();
 
+router.get("/image", brandController.getBrandImage); // Public route to get images
 router.post("/", authMiddleware, requireAdmin, uploadBrandImage, brandController.createBrand);
 router.get("/", brandController.getAllBrands);
 router.get("/:id", brandController.getBrandById);

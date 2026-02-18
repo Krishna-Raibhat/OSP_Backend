@@ -17,10 +17,7 @@ export async function createBrand(input: { name?: string; thumbnail_url?: string
     const result = await pool.query<SoftwareBrand>(q, [name.trim(), thumbnail_url ?? null, original_url ?? null, is_active]);
     
     const brand = result.rows[0];
-    return {
-      ...brand,
-      thumbnail_url: brand.thumbnail_url ? getS3Url(brand.thumbnail_url) : null,
-    };
+    return brand;
   } catch (err: any) {
     if (isPgUniqueViolation(err)) {
       throw new HttpError(409, "Brand name already exists.");
@@ -33,11 +30,7 @@ export async function getAllBrands() {
   const q = `SELECT * FROM software_brands ORDER BY name ASC;`;
   const result = await pool.query<SoftwareBrand>(q);
   
-  // Add full S3 URLs for thumbnail only
-  return result.rows.map(brand => ({
-    ...brand,
-    thumbnail_url: brand.thumbnail_url ? getS3Url(brand.thumbnail_url) : null,
-  }));
+  return result.rows;
 }
 
 export async function getBrandById(id: string) {
@@ -45,11 +38,7 @@ export async function getBrandById(id: string) {
   const result = await pool.query<SoftwareBrand>(q, [id]);
   if (!result.rows[0]) throw new HttpError(404, "Brand not found.");
   
-  const brand = result.rows[0];
-  return {
-    ...brand,
-    thumbnail_url: brand.thumbnail_url ? getS3Url(brand.thumbnail_url) : null,
-  };
+  return result.rows[0];
 }
 
 export async function updateBrand(input: { id: string; name?: string; thumbnail_url?: string; original_url?: string; is_active?: boolean }) {
@@ -94,11 +83,7 @@ export async function updateBrand(input: { id: string; name?: string; thumbnail_
     const result = await pool.query<SoftwareBrand>(q, values);
     if (!result.rows[0]) throw new HttpError(404, "Brand not found.");
     
-    const brand = result.rows[0];
-    return {
-      ...brand,
-      thumbnail_url: brand.thumbnail_url ? getS3Url(brand.thumbnail_url) : null,
-    };
+    return result.rows[0];
   } catch (err: any) {
     if (err instanceof HttpError) throw err;
     if (isPgUniqueViolation(err)) {
