@@ -1,15 +1,29 @@
 import { Request, Response } from "express";
 import { HttpError } from "../utils/errors";
 import { CartridgeBrandService } from "../services/cartridgeBrandService";
+import { uploadBrandImageToS3 } from "../utils/s3Upload";
 import { validate as isUUID } from "uuid";
 
 export const CartridgeBrandController = {
   async createCartridgeBrand(req: Request, res: Response) {
     try {
-      const { name, img_url } = req.body;
+      const { name } = req.body;
       if (!name) throw new HttpError(400, "Brand name is required.");
 
-      const brand = await CartridgeBrandService.createCartridgeBrand(name, img_url);
+      let img_url: string | undefined;
+      if (req.file) {
+        try {
+          const { originalPath } = await uploadBrandImageToS3(req.file, name);
+          img_url = originalPath;
+        } catch (err) {
+          console.error("Image upload error:", err);
+          throw new HttpError(500, "Failed to upload brand image.");
+        }
+      }
+      const brand = await CartridgeBrandService.createCartridgeBrand(
+        name,
+        img_url,
+      );
       return res
         .status(201)
         .json({ message: "Brand created successfully.", brand });
@@ -35,10 +49,14 @@ export const CartridgeBrandController = {
     try {
       const { id } = req.params;
       if (!id) {
-        return res.status(400).json({ message: "Missing required parameter: id" });
+        return res
+          .status(400)
+          .json({ message: "Missing required parameter: id" });
       }
       if (!isUUID(id)) {
-        return res.status(400).json({ message: "Invalid ID format. ID must be a valid UUID." });
+        return res
+          .status(400)
+          .json({ message: "Invalid ID format. ID must be a valid UUID." });
       }
       const brand = await CartridgeBrandService.getCartridgeBrandById(id);
       if (!brand) throw new HttpError(404, "Brand not found.");
@@ -55,11 +73,26 @@ export const CartridgeBrandController = {
     try {
       const { id } = req.params;
       if (!id) {
-        return res.status(400).json({ message: "Missing required parameter: id" });
+        return res
+          .status(400)
+          .json({ message: "Missing required parameter: id" });
       } else if (!isUUID(id)) {
-        return res.status(400).json({ message: "Invalid ID format. ID must be a valid UUID." });
+        return res
+          .status(400)
+          .json({ message: "Invalid ID format. ID must be a valid UUID." });
       }
       const { name, is_active } = req.body;
+
+      let img_url: string | undefined;
+      if (req.file && name) {
+        try {
+          const { originalPath } = await uploadBrandImageToS3(req.file, name);
+          img_url = originalPath;
+        } catch (err) {
+          console.error("Image upload error:", err);
+          throw new HttpError(500, "Failed to upload brand image.");
+        }
+      }
       if (!name && typeof is_active !== "boolean") {
         throw new HttpError(400, "name or is_active is required.");
       }
@@ -67,6 +100,7 @@ export const CartridgeBrandController = {
       const brand = await CartridgeBrandService.updateCartridgeBrand(id, {
         name,
         is_active,
+        img_url,
       });
       if (!brand) throw new HttpError(404, "Brand not found.");
 
@@ -85,11 +119,14 @@ export const CartridgeBrandController = {
     try {
       const { id } = req.params;
       if (!id) {
-        return res.status(400).json({ message: "Missing required parameter: id" });
+        return res
+          .status(400)
+          .json({ message: "Missing required parameter: id" });
+      } else if (!isUUID(id)) {
+        return res
+          .status(400)
+          .json({ message: "Invalid ID format. ID must be a valid UUID." });
       }
-        else if (!isUUID(id)) { 
-        return res.status(400).json({ message: "Invalid ID format. ID must be a valid UUID." });
-      } 
       await CartridgeBrandService.deleteCartridgeBrand(id);
       return res.status(200).json({ message: "Brand deleted successfully." });
     } catch (err: any) {
