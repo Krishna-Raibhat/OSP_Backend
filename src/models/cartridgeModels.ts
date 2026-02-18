@@ -83,9 +83,9 @@ export type CartridgeOrderItem = {
   quantity: number;
   unit_price: number;
   
-  // Generated after payment confirmation (like software)
+  // Generated after payment confirmation
+  // Barcode is generated dynamically from serial_number (not stored)
   serial_number: string | null;
-  barcode_value: string | null;
   
   created_at: string;
   updated_at: string;
