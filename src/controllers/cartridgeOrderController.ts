@@ -49,7 +49,7 @@ export async function createOrderFromCart(req: Request, res: Response) {
     });
   } catch (err: any) {
     if (err instanceof HttpError) return res.status(err.status).json({ message: err.message });
-    console.error("Create order error:", err);
+    console.error("Create cartridge order error:", err);
     return res.status(500).json({ message: "Server error." });
   }
 }
