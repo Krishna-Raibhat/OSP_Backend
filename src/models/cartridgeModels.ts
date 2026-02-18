@@ -82,6 +82,11 @@ export type CartridgeOrderItem = {
   cartridge_product_id: string;
   quantity: number;
   unit_price: number;
+  
+  // Generated after payment confirmation (like software)
+  serial_number: string | null;
+  barcode_value: string | null;
+  
   created_at: string;
   updated_at: string;
 };

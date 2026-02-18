@@ -86,9 +86,12 @@ export async function confirmCODPayment(input: {
       [payment.cartridge_order_id]
     );
 
+    // Generate serial numbers and barcodes
+    await orderService.generateCartridgeCodes(payment.cartridge_order_id);
+
     await client.query("COMMIT");
 
-    return { message: "COD payment confirmed." };
+    return { message: "COD payment confirmed and codes generated." };
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;
@@ -178,6 +181,9 @@ export async function createManualPayment(input: {
       `UPDATE cartridge_orders SET status = 'paid', updated_at = NOW() WHERE id = $1`,
       [order_id]
     );
+
+    // Generate serial numbers and barcodes
+    await orderService.generateCartridgeCodes(order_id);
 
     await client.query("COMMIT");
 

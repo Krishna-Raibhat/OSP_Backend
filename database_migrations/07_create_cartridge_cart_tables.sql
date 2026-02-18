@@ -38,7 +38,20 @@ ALTER TABLE cartridge_orders
 ALTER TABLE cartridge_orders 
   ADD COLUMN IF NOT EXISTS billing_address TEXT NOT NULL DEFAULT '';
 
--- 4. Update cartridge_payments table (add COD and pending status)
+-- 4. Create cartridge_order_items table
+CREATE TABLE IF NOT EXISTS cartridge_order_items (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  order_id UUID NOT NULL REFERENCES cartridge_orders(id) ON DELETE CASCADE,
+  cartridge_product_id UUID NOT NULL REFERENCES cartridge_products(id) ON DELETE CASCADE,
+  quantity INTEGER NOT NULL DEFAULT 1 CHECK (quantity > 0),
+  unit_price DECIMAL(10, 2) NOT NULL,
+  serial_number VARCHAR(255) NULL,
+  barcode_value VARCHAR(255) NULL,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- 5. Update cartridge_payments table (add COD and pending status)
 ALTER TABLE cartridge_payments 
   DROP CONSTRAINT IF EXISTS cartridge_payments_payment_type_check;
 
@@ -57,13 +70,17 @@ ALTER TABLE cartridge_payments
 ALTER TABLE cartridge_payments 
   ALTER COLUMN gateway DROP NOT NULL;
 
--- 5. Create indexes
+-- 6. Create indexes
 CREATE INDEX IF NOT EXISTS idx_cartridge_carts_user_id ON cartridge_carts(user_id);
 CREATE INDEX IF NOT EXISTS idx_cartridge_carts_status ON cartridge_carts(status);
 CREATE INDEX IF NOT EXISTS idx_cartridge_cart_items_cart_id ON cartridge_cart_items(cart_id);
 CREATE INDEX IF NOT EXISTS idx_cartridge_cart_items_product_id ON cartridge_cart_items(cartridge_product_id);
 CREATE INDEX IF NOT EXISTS idx_cartridge_orders_buyer_user_id ON cartridge_orders(buyer_user_id);
 CREATE INDEX IF NOT EXISTS idx_cartridge_orders_status ON cartridge_orders(status);
+CREATE INDEX IF NOT EXISTS idx_cartridge_order_items_order_id ON cartridge_order_items(order_id);
+CREATE INDEX IF NOT EXISTS idx_cartridge_order_items_product_id ON cartridge_order_items(cartridge_product_id);
+CREATE INDEX IF NOT EXISTS idx_cartridge_order_items_serial ON cartridge_order_items(serial_number);
+CREATE INDEX IF NOT EXISTS idx_cartridge_order_items_barcode ON cartridge_order_items(barcode_value);
 CREATE INDEX IF NOT EXISTS idx_cartridge_payments_order_id ON cartridge_payments(cartridge_order_id);
 CREATE INDEX IF NOT EXISTS idx_cartridge_payments_type_status ON cartridge_payments(payment_type, status);
 
