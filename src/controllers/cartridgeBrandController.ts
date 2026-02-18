@@ -1,28 +1,29 @@
 import { Request, Response } from "express";
 import { HttpError } from "../utils/errors";
 import { CartridgeBrandService } from "../services/cartridgeBrandService";
-import { uploadBrandImageToS3 } from "../utils/s3Upload";
+import { uploadBrandImageToFolder } from "../utils/folderUpload";
 import { validate as isUUID } from "uuid";
 
 export const CartridgeBrandController = {
   async createCartridgeBrand(req: Request, res: Response) {
     try {
-      const { name } = req.body;
+      const { name, is_active } = req.body;
       if (!name) throw new HttpError(400, "Brand name is required.");
 
       let img_url: string | undefined;
-      if (req.file) {
-        try {
-          const { originalPath } = await uploadBrandImageToS3(req.file, name);
-          img_url = originalPath;
-        } catch (err) {
-          console.error("Image upload error:", err);
-          throw new HttpError(500, "Failed to upload brand image.");
-        }
+
+      // Image is required when creating brand
+      if (!req.file) {
+        return res.status(400).json({ message: "Brand image is required." });
       }
+
+      const { originalPath } = await uploadBrandImageToFolder(req.file, name);
+      img_url = originalPath;
+
       const brand = await CartridgeBrandService.createCartridgeBrand(
         name,
         img_url,
+        is_active,
       );
       return res
         .status(201)
@@ -83,18 +84,32 @@ export const CartridgeBrandController = {
       }
       const { name, is_active } = req.body;
 
+      // Check if at least one field or image is provided
+      if (!name && typeof is_active !== "boolean" && !req.file) {
+        throw new HttpError(
+          400,
+          "At least one of name, is_active, or image must be provided.",
+        );
+      }
+
+      // Get current brand to use existing name if needed
+      const currentBrand =
+        await CartridgeBrandService.getCartridgeBrandById(id);
+      if (!currentBrand) throw new HttpError(404, "Brand not found.");
+
       let img_url: string | undefined;
-      if (req.file && name) {
+      if (req.file) {
         try {
-          const { originalPath } = await uploadBrandImageToS3(req.file, name);
+          const folderName = name || currentBrand.name; // Use new name if provided, otherwise use existing name
+          const { originalPath } = await uploadBrandImageToFolder(
+            req.file,
+            folderName,
+          );
           img_url = originalPath;
         } catch (err) {
           console.error("Image upload error:", err);
           throw new HttpError(500, "Failed to upload brand image.");
         }
-      }
-      if (!name && typeof is_active !== "boolean") {
-        throw new HttpError(400, "name or is_active is required.");
       }
 
       const brand = await CartridgeBrandService.updateCartridgeBrand(id, {
