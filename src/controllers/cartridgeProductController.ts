@@ -168,3 +168,22 @@ export async function deleteProduct(req: Request, res: Response) {
         return res.status(500).json({ message: 'Server error.' });
     }
 }
+
+export async function getProductByQrId(req: Request, res: Response) {
+  try {
+    const  qrId  = req.params.id ;
+    if (!qrId) {
+      return res.status(400).json({ message: 'Missing required parameter: qrId' });
+    }
+    const product = await productService.getProductByQrId(qrId as string  );
+    if (!product) {
+      return res.status(404).json({ message: 'Product not found for this QR code.' });
+    }
+    return res.status(200).json(product);
+  } catch (err: any) {
+    if (err instanceof HttpError)
+      return res.status(err.status).json({ message: err.message });
+    console.error('Get product by QR value error:', err);
+    return res.status(500).json({ message: 'Server error.' });
+  }
+}
