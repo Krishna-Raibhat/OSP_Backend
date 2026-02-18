@@ -1,6 +1,7 @@
 import { pool } from "../config/db";
 import { HttpError } from "../utils/errors";
 import type { CartridgeOrder } from "../models/cartridgeModels";
+import { generateBarcodeImage } from "../utils/barcodeGenerator";
 
 /* ==================== CARTRIDGE ORDER SERVICES ==================== */
 
@@ -77,10 +78,9 @@ export async function createOrder(input: CreateOrderInput) {
           cartridge_product_id,
           quantity,
           unit_price,
-          serial_number,
-          barcode_value
+          serial_number
         )
-        VALUES ($1, $2, $3, $4, NULL, NULL)
+        VALUES ($1, $2, $3, $4, NULL)
         RETURNING *;
       `;
 
@@ -375,7 +375,7 @@ export async function getAllOrders(filters?: {
   return result.rows;
 }
 
-// Admin: Get order details
+// Admin: Get order details with barcode images
 export async function getOrderDetailsAdmin(order_id: string) {
   const orderQuery = `
     SELECT 
@@ -410,7 +410,6 @@ export async function getOrderDetailsAdmin(order_id: string) {
       oi.quantity,
       oi.unit_price,
       oi.serial_number,
-      oi.barcode_value,
       oi.created_at,
       p.product_name,
       p.model_number,
@@ -426,19 +425,44 @@ export async function getOrderDetailsAdmin(order_id: string) {
 
   const itemsResult = await pool.query(itemsQuery, [order_id]);
 
+  // Generate barcode images for items with serial numbers
+  const itemsWithBarcodes = await Promise.all(
+    itemsResult.rows.map(async (item: any) => {
+      if (item.serial_number) {
+        try {
+          const barcodeImage = await generateBarcodeImage(item.serial_number);
+          return {
+            ...item,
+            barcode_image: barcodeImage, // Base64 data URL
+          };
+        } catch (error) {
+          console.error(`Failed to generate barcode for item ${item.id}:`, error);
+          return {
+            ...item,
+            barcode_image: null,
+          };
+        }
+      }
+      return {
+        ...item,
+        barcode_image: null,
+      };
+    })
+  );
+
   return {
     order,
     payment: paymentResult.rows[0] || null,
-    items: itemsResult.rows,
+    items: itemsWithBarcodes,
     summary: {
-      total_items: itemsResult.rows.reduce((sum: number, item: any) => sum + item.quantity, 0),
-      items_with_codes: itemsResult.rows.filter((item: any) => item.serial_number).length,
-      items_without_codes: itemsResult.rows.filter((item: any) => !item.serial_number).length,
+      total_items: itemsWithBarcodes.reduce((sum: number, item: any) => sum + item.quantity, 0),
+      items_with_codes: itemsWithBarcodes.filter((item: any) => item.serial_number).length,
+      items_without_codes: itemsWithBarcodes.filter((item: any) => !item.serial_number).length,
     }
   };
 }
 
-// Generate serial numbers and barcodes after payment
+// Generate serial numbers after payment (barcode generated on-demand from serial)
 export async function generateCartridgeCodes(order_id: string) {
   // Get all order items without serial numbers
   const itemsQuery = `
@@ -453,25 +477,19 @@ export async function generateCartridgeCodes(order_id: string) {
   const itemsResult = await pool.query(itemsQuery, [order_id]);
 
   for (const item of itemsResult.rows) {
-    // Generate unique serial and barcode for each item
+    // Generate unique serial number (barcode will be generated from this)
     const serial = `CART-SN-${Date.now()}-${Math.random().toString(36).substring(2, 11).toUpperCase()}`;
-    const barcode = `CART-BC-${Date.now()}-${Math.random().toString(36).substring(2, 11).toUpperCase()}`;
 
     const updateQuery = `
       UPDATE cartridge_order_items 
       SET 
         serial_number = $1,
-        barcode_value = $2,
         updated_at = NOW()
-      WHERE id = $3;
+      WHERE id = $2;
     `;
 
-    await pool.query(updateQuery, [
-      serial,
-      barcode,
-      item.id,
-    ]);
+    await pool.query(updateQuery, [serial, item.id]);
   }
 
-  return { message: "Cartridge codes generated successfully." };
+  return { message: "Cartridge serial numbers generated successfully." };
 }
