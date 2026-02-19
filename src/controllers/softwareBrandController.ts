@@ -5,6 +5,28 @@ import * as brandService from "../services/softwareBrandService";
 import { uploadBrandImageToS3 } from "../utils/s3Upload";
 import { env } from "../utils/env";
 
+// Helper to parse is_active from multipart/form-data
+function parseIsActive(value: any): boolean {
+  if (value === undefined) return true; // default
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') {
+    const lower = value.toLowerCase().trim();
+    return !(lower === 'false' || lower === '0' || lower === '');
+  }
+  return Boolean(value);
+}
+
+// Helper to normalize category_id (trim whitespace, convert empty to undefined)
+function normalizeCategoryId(value: any): string | undefined {
+  if (value === undefined) return undefined;
+  if (!value) return undefined; // null, empty string, etc. become undefined
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed === '' ? undefined : trimmed;
+  }
+  return value;
+}
+
 export async function createBrand(req: Request, res: Response) {
   try {
     const { name, category_id, is_active } = req.body;
@@ -18,8 +40,9 @@ export async function createBrand(req: Request, res: Response) {
       return res.status(400).json({ message: "Brand image is required." });
     }
 
-    // Convert is_active to boolean (handles string "true"/"false" from multipart/form-data)
-    const isActiveBoolean = is_active === "false" || is_active === false ? false : true;
+    // Use helper functions for parsing
+    const normalizedCategoryId = normalizeCategoryId(category_id);
+    const isActiveBoolean = parseIsActive(is_active);
 
     // Upload image to S3 first
     const { originalPath, thumbnailPath } = await uploadBrandImageToS3(req.file, name);
@@ -27,7 +50,7 @@ export async function createBrand(req: Request, res: Response) {
     // Create brand with image paths
     const brandData = await brandService.createBrand({
       name,
-      category_id: category_id || undefined,
+      category_id: normalizedCategoryId,
       is_active: isActiveBoolean,
       thumbnail_url: thumbnailPath,
       original_url: originalPath,
@@ -71,6 +94,12 @@ export async function updateBrand(req: Request, res: Response) {
   try {
     const id = validateUUID(req.params.id, "Brand ID");
     
+    // Use helper functions for parsing
+    const parsedIsActive = req.body.is_active !== undefined 
+      ? parseIsActive(req.body.is_active) 
+      : undefined;
+    const normalizedCategoryId = normalizeCategoryId(req.body.category_id);
+    
     let thumbnail_url = undefined;
     let original_url = undefined;
 
@@ -88,6 +117,8 @@ export async function updateBrand(req: Request, res: Response) {
     const data = await brandService.updateBrand({ 
       id, 
       ...req.body,
+      ...(parsedIsActive !== undefined && { is_active: parsedIsActive }),
+      ...(normalizedCategoryId !== undefined && { category_id: normalizedCategoryId }),
       ...(thumbnail_url !== undefined && { thumbnail_url }),
       ...(original_url !== undefined && { original_url }),
     });

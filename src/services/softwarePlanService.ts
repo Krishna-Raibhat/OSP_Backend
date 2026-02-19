@@ -1,5 +1,5 @@
 import { pool } from "../config/db";
-import { HttpError } from "../utils/errors";
+import { HttpError, isPgForeignKeyViolation, isPgUniqueViolation } from "../utils/errors";
 import type { SoftwarePlan } from "../models/softwareModels";
 
 export async function createPlan(input: {
@@ -32,27 +32,60 @@ export async function createPlan(input: {
   if (!duration_type) throw new HttpError(400, "Duration type is required.");
   if (price === undefined || price === null) throw new HttpError(400, "Price is required.");
 
-  const q = `
-    INSERT INTO software_plans (
-      software_product_id, plan_name, duration_type, price, special_price, 
-      features, activation_key, start_date, expiry_date, is_active
-    )
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-    RETURNING *;
-  `;
-  const result = await pool.query<SoftwarePlan>(q, [
-    software_product_id,
-    plan_name.trim(),
-    duration_type,
-    price,
-    special_price ?? null,
-    features ?? null,
-    activation_key ?? null,
-    start_date ?? null,
-    expiry_date ?? null,
-    is_active,
-  ]);
-  return result.rows[0];
+  // Validate numbers
+  if (price < 0) throw new HttpError(400, "Price cannot be negative.");
+  if (special_price !== undefined && special_price !== null) {
+    if (special_price < 0) throw new HttpError(400, "Special price cannot be negative.");
+    if (special_price > price) throw new HttpError(400, "Special price cannot be greater than regular price.");
+  }
+
+  // Validate dates
+  if (start_date && expiry_date) {
+    const startDateObj = new Date(start_date);
+    const expiryDateObj = new Date(expiry_date);
+    
+    if (isNaN(startDateObj.getTime())) throw new HttpError(400, "Invalid start date format.");
+    if (isNaN(expiryDateObj.getTime())) throw new HttpError(400, "Invalid expiry date format.");
+    if (expiryDateObj <= startDateObj) throw new HttpError(400, "Expiry date must be after start date.");
+  } else if (start_date) {
+    const startDateObj = new Date(start_date);
+    if (isNaN(startDateObj.getTime())) throw new HttpError(400, "Invalid start date format.");
+  } else if (expiry_date) {
+    const expiryDateObj = new Date(expiry_date);
+    if (isNaN(expiryDateObj.getTime())) throw new HttpError(400, "Invalid expiry date format.");
+  }
+
+  try {
+    const q = `
+      INSERT INTO software_plans (
+        software_product_id, plan_name, duration_type, price, special_price, 
+        features, activation_key, start_date, expiry_date, is_active
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      RETURNING *;
+    `;
+    const result = await pool.query<SoftwarePlan>(q, [
+      software_product_id,
+      plan_name.trim(),
+      duration_type,
+      price,
+      special_price ?? null,
+      features ?? null,
+      activation_key ?? null,
+      start_date ?? null,
+      expiry_date ?? null,
+      is_active,
+    ]);
+    return result.rows[0];
+  } catch (err: any) {
+    if (isPgForeignKeyViolation(err)) {
+      throw new HttpError(400, "Invalid product ID.");
+    }
+    if (isPgUniqueViolation(err)) {
+      throw new HttpError(409, "Plan with this name already exists for this product.");
+    }
+    throw err;
+  }
 }
 
 export async function getAllPlans() {
@@ -102,65 +135,105 @@ export async function updatePlan(input: {
     throw new HttpError(400, "At least one field is required.");
   }
 
-  const updates: string[] = [];
-  const values: any[] = [];
-  let paramIndex = 1;
-
-  if (plan_name) {
-    updates.push(`plan_name = $${paramIndex++}`);
-    values.push(plan_name.trim());
+  // Validate numbers
+  if (price !== undefined && price < 0) {
+    throw new HttpError(400, "Price cannot be negative.");
   }
-  if (duration_type) {
-    updates.push(`duration_type = $${paramIndex++}`);
-    values.push(duration_type);
-  }
-  if (price !== undefined) {
-    updates.push(`price = $${paramIndex++}`);
-    values.push(price);
-  }
-  if (special_price !== undefined) {
-    updates.push(`special_price = $${paramIndex++}`);
-    values.push(special_price ?? null);
-  }
-  if (features !== undefined) {
-    updates.push(`features = $${paramIndex++}`);
-    values.push(features ?? null);
-  }
-  if (activation_key !== undefined) {
-    updates.push(`activation_key = $${paramIndex++}`);
-    values.push(activation_key ?? null);
-  }
-  if (start_date !== undefined) {
-    updates.push(`start_date = $${paramIndex++}`);
-    values.push(start_date ?? null);
-  }
-  if (expiry_date !== undefined) {
-    updates.push(`expiry_date = $${paramIndex++}`);
-    values.push(expiry_date ?? null);
-  }
-  if (is_active !== undefined) {
-    updates.push(`is_active = $${paramIndex++}`);
-    values.push(is_active);
+  if (special_price !== undefined && special_price !== null && special_price < 0) {
+    throw new HttpError(400, "Special price cannot be negative.");
   }
 
-  updates.push(`updated_at = NOW()`);
-  values.push(id);
+  // If both price and special_price are provided, validate relationship
+  if (price !== undefined && special_price !== undefined && special_price !== null) {
+    if (special_price > price) {
+      throw new HttpError(400, "Special price cannot be greater than regular price.");
+    }
+  }
 
-  const q = `
-    UPDATE software_plans
-    SET ${updates.join(", ")}
-    WHERE id = $${paramIndex}
-    RETURNING *;
-  `;
+  // Validate dates
+  if (start_date !== undefined && start_date !== null) {
+    const startDateObj = new Date(start_date);
+    if (isNaN(startDateObj.getTime())) throw new HttpError(400, "Invalid start date format.");
+  }
+  if (expiry_date !== undefined && expiry_date !== null) {
+    const expiryDateObj = new Date(expiry_date);
+    if (isNaN(expiryDateObj.getTime())) throw new HttpError(400, "Invalid expiry date format.");
+  }
+  if (start_date && expiry_date) {
+    const startDateObj = new Date(start_date);
+    const expiryDateObj = new Date(expiry_date);
+    if (expiryDateObj <= startDateObj) {
+      throw new HttpError(400, "Expiry date must be after start date.");
+    }
+  }
 
-  const result = await pool.query<SoftwarePlan>(q, values);
-  if (!result.rows[0]) throw new HttpError(404, "Plan not found.");
-  return result.rows[0];
+  try {
+    const updates: string[] = [];
+    const values: (string | number | boolean | null)[] = [];
+    let paramIndex = 1;
+
+    if (plan_name) {
+      updates.push(`plan_name = $${paramIndex++}`);
+      values.push(plan_name.trim());
+    }
+    if (duration_type) {
+      updates.push(`duration_type = $${paramIndex++}`);
+      values.push(duration_type);
+    }
+    if (price !== undefined) {
+      updates.push(`price = $${paramIndex++}`);
+      values.push(price);
+    }
+    if (special_price !== undefined) {
+      updates.push(`special_price = $${paramIndex++}`);
+      values.push(special_price ?? null);
+    }
+    if (features !== undefined) {
+      updates.push(`features = $${paramIndex++}`);
+      values.push(features ?? null);
+    }
+    if (activation_key !== undefined) {
+      updates.push(`activation_key = $${paramIndex++}`);
+      values.push(activation_key ?? null);
+    }
+    if (start_date !== undefined) {
+      updates.push(`start_date = $${paramIndex++}`);
+      values.push(start_date ?? null);
+    }
+    if (expiry_date !== undefined) {
+      updates.push(`expiry_date = $${paramIndex++}`);
+      values.push(expiry_date ?? null);
+    }
+    if (is_active !== undefined) {
+      updates.push(`is_active = $${paramIndex++}`);
+      values.push(is_active);
+    }
+
+    updates.push(`updated_at = NOW()`);
+    values.push(id);
+
+    const q = `
+      UPDATE software_plans
+      SET ${updates.join(", ")}
+      WHERE id = $${paramIndex}
+      RETURNING *;
+    `;
+
+    const result = await pool.query<SoftwarePlan>(q, values);
+    if (!result.rows[0]) throw new HttpError(404, "Plan not found.");
+    return result.rows[0];
+  } catch (err: any) {
+    if (err instanceof HttpError) throw err;
+    if (isPgUniqueViolation(err)) {
+      throw new HttpError(409, "Plan with this name already exists for this product.");
+    }
+    throw err;
+  }
 }
 
 export async function deletePlan(id: string) {
   const q = `DELETE FROM software_plans WHERE id = $1 RETURNING *;`;
   const result = await pool.query<SoftwarePlan>(q, [id]);
   if (!result.rows[0]) throw new HttpError(404, "Plan not found.");
-  return { message: "Plan deleted successfully." };
+  return result.rows[0];
 }

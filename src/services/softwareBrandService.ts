@@ -1,6 +1,6 @@
 import { pool } from "../config/db";
 import { HttpError, isPgUniqueViolation, isPgForeignKeyViolation } from "../utils/errors";
-import type { SoftwareBrand } from "../models/softwareModels";
+import type { SoftwareBrand, SoftwareBrandWithCategory } from "../models/softwareModels";
 
 export async function createBrand(input: { 
   name?: string; 
@@ -50,7 +50,7 @@ export async function getAllBrands() {
     LEFT JOIN software_categories c ON b.category_id = c.id 
     ORDER BY b.name ASC;
   `;
-  const result = await pool.query<SoftwareBrand>(q);
+  const result = await pool.query<SoftwareBrandWithCategory>(q);
   
   return result.rows;
 }
@@ -62,7 +62,7 @@ export async function getBrandById(id: string) {
     LEFT JOIN software_categories c ON b.category_id = c.id 
     WHERE b.id = $1;
   `;
-  const result = await pool.query<SoftwareBrand>(q, [id]);
+  const result = await pool.query<SoftwareBrandWithCategory>(q, [id]);
   if (!result.rows[0]) throw new HttpError(404, "Brand not found.");
   
   return result.rows[0];
@@ -94,7 +94,9 @@ export async function updateBrand(input: {
     }
     if (category_id !== undefined) {
       updates.push(`category_id = $${paramIndex++}`);
-      values.push(category_id ?? null);
+      // Convert empty string to null
+      const normalizedCategoryId = category_id && category_id.trim() !== '' ? category_id : null;
+      values.push(normalizedCategoryId);
     }
     if (thumbnail_url !== undefined) {
       updates.push(`thumbnail_url = $${paramIndex++}`);
