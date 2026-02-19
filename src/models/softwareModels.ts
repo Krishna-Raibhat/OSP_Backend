@@ -3,6 +3,7 @@
 export type SoftwareBrand = {
   id: string;
   name: string;
+  category_id: string | null;
   thumbnail_url: string | null;
   original_url: string | null;
   is_active: boolean;

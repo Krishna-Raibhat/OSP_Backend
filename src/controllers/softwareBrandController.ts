@@ -1,7 +1,9 @@
 import type { Request, Response } from "express";
+import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
 import { HttpError } from "../utils/errors";
 import * as brandService from "../services/softwareBrandService";
 import { uploadBrandImageToS3 } from "../utils/s3Upload";
+import { env } from "../utils/env";
 
 export async function createBrand(req: Request, res: Response) {
   try {
@@ -108,19 +110,12 @@ export async function deleteBrand(req: Request, res: Response) {
   }
 }
 
-export async function getBrandImage(req: Request, res: Response) {
-  try {
-    const { S3Client, GetObjectCommand } = require("@aws-sdk/client-s3");
-    const { env } = require("../utils/env");
-    
-    const { path } = req.query;
+// Initialize S3 client once (reused across requests)
+let s3ClientInstance: S3Client | null = null;
 
-    if (!path || typeof path !== "string") {
-      return res.status(400).json({ message: "Image path is required." });
-    }
-
-    // Initialize S3 client
-    const s3Client = new S3Client({
+function getS3ClientInstance(): S3Client {
+  if (!s3ClientInstance) {
+    s3ClientInstance = new S3Client({
       region: env.AWS_REGION || "us-east-1",
       credentials: {
         accessKeyId: env.AWS_ACCESS_KEY_ID!,
@@ -129,6 +124,20 @@ export async function getBrandImage(req: Request, res: Response) {
       endpoint: env.AWS_ENDPOINT,
       forcePathStyle: true,
     });
+  }
+  return s3ClientInstance;
+}
+
+export async function getBrandImage(req: Request, res: Response) {
+  try {
+    const { path } = req.query;
+
+    if (!path || typeof path !== "string") {
+      return res.status(400).json({ message: "Image path is required." });
+    }
+
+    // Get S3 client
+    const s3Client = getS3ClientInstance();
 
     // Get object from S3
     const command = new GetObjectCommand({

@@ -1,20 +1,31 @@
 import { pool } from "../config/db";
 import { HttpError, isPgUniqueViolation, isPgForeignKeyViolation } from "../utils/errors";
-import { getS3Url } from "../utils/s3Upload";
 import type { SoftwareBrand } from "../models/softwareModels";
 
-export async function createBrand(input: { name?: string; thumbnail_url?: string; original_url?: string; is_active?: boolean }) {
-  const { name, thumbnail_url, original_url, is_active = true } = input;
+export async function createBrand(input: { 
+  name?: string; 
+  category_id?: string;
+  thumbnail_url?: string; 
+  original_url?: string; 
+  is_active?: boolean 
+}) {
+  const { name, category_id, thumbnail_url, original_url, is_active = true } = input;
 
   if (!name) throw new HttpError(400, "Brand name is required.");
 
   try {
     const q = `
-      INSERT INTO software_brands (name, thumbnail_url, original_url, is_active)
-      VALUES ($1, $2, $3, $4)
+      INSERT INTO software_brands (name, category_id, thumbnail_url, original_url, is_active)
+      VALUES ($1, $2, $3, $4, $5)
       RETURNING *;
     `;
-    const result = await pool.query<SoftwareBrand>(q, [name.trim(), thumbnail_url ?? null, original_url ?? null, is_active]);
+    const result = await pool.query<SoftwareBrand>(q, [
+      name.trim(), 
+      category_id ?? null,
+      thumbnail_url ?? null, 
+      original_url ?? null, 
+      is_active
+    ]);
     
     const brand = result.rows[0];
     return brand;
@@ -27,24 +38,41 @@ export async function createBrand(input: { name?: string; thumbnail_url?: string
 }
 
 export async function getAllBrands() {
-  const q = `SELECT * FROM software_brands ORDER BY name ASC;`;
+  const q = `
+    SELECT b.*, c.name as category_name 
+    FROM software_brands b 
+    LEFT JOIN software_categories c ON b.category_id = c.id 
+    ORDER BY b.name ASC;
+  `;
   const result = await pool.query<SoftwareBrand>(q);
   
   return result.rows;
 }
 
 export async function getBrandById(id: string) {
-  const q = `SELECT * FROM software_brands WHERE id = $1;`;
+  const q = `
+    SELECT b.*, c.name as category_name 
+    FROM software_brands b 
+    LEFT JOIN software_categories c ON b.category_id = c.id 
+    WHERE b.id = $1;
+  `;
   const result = await pool.query<SoftwareBrand>(q, [id]);
   if (!result.rows[0]) throw new HttpError(404, "Brand not found.");
   
   return result.rows[0];
 }
 
-export async function updateBrand(input: { id: string; name?: string; thumbnail_url?: string; original_url?: string; is_active?: boolean }) {
-  const { id, name, thumbnail_url, original_url, is_active } = input;
+export async function updateBrand(input: { 
+  id: string; 
+  name?: string; 
+  category_id?: string;
+  thumbnail_url?: string; 
+  original_url?: string; 
+  is_active?: boolean 
+}) {
+  const { id, name, category_id, thumbnail_url, original_url, is_active } = input;
 
-  if (!name && thumbnail_url === undefined && original_url === undefined && is_active === undefined) {
+  if (!name && category_id === undefined && thumbnail_url === undefined && original_url === undefined && is_active === undefined) {
     throw new HttpError(400, "At least one field is required.");
   }
 
@@ -56,6 +84,10 @@ export async function updateBrand(input: { id: string; name?: string; thumbnail_
     if (name) {
       updates.push(`name = $${paramIndex++}`);
       values.push(name.trim());
+    }
+    if (category_id !== undefined) {
+      updates.push(`category_id = $${paramIndex++}`);
+      values.push(category_id ?? null);
     }
     if (thumbnail_url !== undefined) {
       updates.push(`thumbnail_url = $${paramIndex++}`);
