@@ -1,5 +1,5 @@
 import { pool } from "../config/db";
-import { HttpError, isPgForeignKeyViolation, isPgUniqueViolation } from "../utils/errors";
+import { HttpError, isPgForeignKeyViolation, isPgUniqueViolation, validateDateFormat } from "../utils/errors";
 import type { SoftwarePlan } from "../models/softwareModels";
 
 export async function createPlan(input: {
@@ -39,20 +39,19 @@ export async function createPlan(input: {
     if (special_price > price) throw new HttpError(400, "Special price cannot be greater than regular price.");
   }
 
-  // Validate dates
+  // Validate dates (strict YYYY-MM-DD format)
+  if (start_date) {
+    validateDateFormat(start_date, "Start date");
+  }
+  if (expiry_date) {
+    validateDateFormat(expiry_date, "Expiry date");
+  }
   if (start_date && expiry_date) {
     const startDateObj = new Date(start_date);
     const expiryDateObj = new Date(expiry_date);
-    
-    if (isNaN(startDateObj.getTime())) throw new HttpError(400, "Invalid start date format.");
-    if (isNaN(expiryDateObj.getTime())) throw new HttpError(400, "Invalid expiry date format.");
-    if (expiryDateObj <= startDateObj) throw new HttpError(400, "Expiry date must be after start date.");
-  } else if (start_date) {
-    const startDateObj = new Date(start_date);
-    if (isNaN(startDateObj.getTime())) throw new HttpError(400, "Invalid start date format.");
-  } else if (expiry_date) {
-    const expiryDateObj = new Date(expiry_date);
-    if (isNaN(expiryDateObj.getTime())) throw new HttpError(400, "Invalid expiry date format.");
+    if (expiryDateObj <= startDateObj) {
+      throw new HttpError(400, "Expiry date must be after start date.");
+    }
   }
 
   try {
@@ -82,7 +81,7 @@ export async function createPlan(input: {
       throw new HttpError(400, "Invalid product ID.");
     }
     if (isPgUniqueViolation(err)) {
-      throw new HttpError(409, "Plan with this name already exists for this product.");
+      throw new HttpError(409, "Plan name already exists.");
     }
     throw err;
   }
@@ -150,14 +149,12 @@ export async function updatePlan(input: {
     }
   }
 
-  // Validate dates
+  // Validate dates (strict YYYY-MM-DD format)
   if (start_date !== undefined && start_date !== null) {
-    const startDateObj = new Date(start_date);
-    if (isNaN(startDateObj.getTime())) throw new HttpError(400, "Invalid start date format.");
+    validateDateFormat(start_date, "Start date");
   }
   if (expiry_date !== undefined && expiry_date !== null) {
-    const expiryDateObj = new Date(expiry_date);
-    if (isNaN(expiryDateObj.getTime())) throw new HttpError(400, "Invalid expiry date format.");
+    validateDateFormat(expiry_date, "Expiry date");
   }
   if (start_date && expiry_date) {
     const startDateObj = new Date(start_date);
@@ -224,8 +221,11 @@ export async function updatePlan(input: {
     return result.rows[0];
   } catch (err: any) {
     if (err instanceof HttpError) throw err;
+    if (isPgForeignKeyViolation(err)) {
+      throw new HttpError(400, "Invalid product ID.");
+    }
     if (isPgUniqueViolation(err)) {
-      throw new HttpError(409, "Plan with this name already exists for this product.");
+      throw new HttpError(409, "Plan name already exists.");
     }
     throw err;
   }

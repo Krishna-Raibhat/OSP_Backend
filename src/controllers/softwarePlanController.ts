@@ -4,9 +4,12 @@ import * as planService from "../services/softwarePlanService";
 
 export async function createPlan(req: Request, res: Response) {
   try {
-    // Validate product ID in request body
+    // Validate product ID in request body (required field)
     const { software_product_id } = req.body;
-    if (software_product_id) validateUUID(software_product_id, "Product ID");
+    if (!software_product_id) {
+      return res.status(400).json({ message: "Product ID is required." });
+    }
+    validateUUID(software_product_id, "Product ID");
     
     const data = await planService.createPlan(req.body);
     return res.status(201).json({ message: "Plan created successfully.", data });

@@ -32,3 +32,20 @@ export function validateUUID(id: string | string[] | undefined, fieldName: strin
   }
   return idString;
 }
+
+// Date format validation helper (YYYY-MM-DD)
+export function isValidDateFormat(dateString: string): boolean {
+  const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+  return dateRegex.test(dateString);
+}
+
+export function validateDateFormat(dateString: string, fieldName: string = "Date"): void {
+  if (!isValidDateFormat(dateString)) {
+    throw new HttpError(400, `Invalid ${fieldName} format. Expected YYYY-MM-DD.`);
+  }
+  
+  const dateObj = new Date(dateString);
+  if (isNaN(dateObj.getTime())) {
+    throw new HttpError(400, `Invalid ${fieldName}.`);
+  }
+}
