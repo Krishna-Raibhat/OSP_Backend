@@ -1,25 +1,19 @@
-import QRCode from "qrcode";
+//import QRCode from "qrcode";
 import { pool } from "../config/db";
 import { HttpError } from "../utils/errors";
 import {
-  CartridgeProduct,
+  //CartridgeProduct,
   CartridgeProductQR,
 } from "../models/cartridgeModels";
 
-export async function generateProductQR(product: CartridgeProduct) {
+export async function generateProductQR(productId: string, qrPath: string): Promise<CartridgeProductQR> {
   try {
-    const scanUrl = `${process.env.BASE_URL}/cartridge/products/${product.id}`;
-    const qrCode = await QRCode.toDataURL(scanUrl);
-    const result = await pool.query<CartridgeProductQR>(
-      `
-    INSERT INTO cartridge_product_qr
-      (cartridge_product_id, qr_value, is_active, created_at, updated_at)
-    VALUES
-      ($1, $2, true, NOW(), NOW())
+    
+    const q=`INSERT INTO cartridge_product_qr (cartridge_product_id, qr_value, is_active, created_at, updated_at)
+    VALUES ($1, $2, true, NOW(), NOW())
     RETURNING *;
-    `,
-      [product.id, qrCode],
-    );
+    `;
+    const result = await pool.query<CartridgeProductQR>(q, [productId, qrPath]);
     return result.rows[0];
   } catch (err) {
     console.error("QR code generation error:", err);
@@ -114,24 +108,24 @@ export async function getAllProductQRs() {
   }
 }
 
-export async function updateProductQR(product: CartridgeProduct) {
-  try {
-    const scanUrl = `${process.env.BASE_URL}/cartridge/products/${product.id}`;
-    const qrCode = await QRCode.toDataURL(scanUrl);
-    const result = await pool.query<CartridgeProductQR>(
-      `
-    UPDATE cartridge_product_qr
-    SET qr_value = $1, updated_at = NOW()
-    WHERE cartridge_product_id = $2
-    RETURNING *;
-    `,
-      [qrCode, product.id],
-    );
-    if (result.rows.length === 0) {
-      throw new HttpError(404, "QR code not found for this product.");
-    }
-    return result.rows[0];
-  } catch (err) {
-    throw new HttpError(500, "Failed to update QR code.");
-  }
-}
+// export async function updateProductQR(product: CartridgeProduct) {
+//   try {
+//     const scanUrl = `${process.env.BASE_URL}/cartridge/products/${product.id}`;
+//     const qrCode = await QRCode.toDataURL(scanUrl);
+//     const result = await pool.query<CartridgeProductQR>(
+//       `
+//     UPDATE cartridge_product_qr
+//     SET qr_value = $1, updated_at = NOW()
+//     WHERE cartridge_product_id = $2
+//     RETURNING *;
+//     `,
+//       [qrCode, product.id],
+//     );
+//     if (result.rows.length === 0) {
+//       throw new HttpError(404, "QR code not found for this product.");
+//     }
+//     return result.rows[0];
+//   } catch (err) {
+//     throw new HttpError(500, "Failed to update QR code.");
+//   }
+// }

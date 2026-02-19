@@ -42,7 +42,7 @@ export async function createProduct(req: Request, res: Response) {
         const { brand_id, brand_name, category_id, category_name, product_name, model_number, unit_price } = req.body;
 
         // Validate required fields
-        if (!brand_name || !category_name || !product_name || !model_number || unit_price === undefined) {
+        if (!product_name || !model_number || unit_price === undefined) {
             return res.status(400).json({ message: 'Missing required fields: brand_name, category_name, product_name, model_number, unit_price' });
         }
 
@@ -177,8 +177,8 @@ export async function updateProduct(req: Request, res: Response) {
         }
 
         const product: CartridgeProduct = await productService.updateCartridgeProduct(input);
-        const qrData = await qrController.updateQrCode( product);
-        return res.status(200).json({ message: 'Product updated successfully.', data: product, qrData });
+        //const qrData = await qrController.updateQrCode( product);
+        return res.status(200).json({ message: 'Product updated successfully.', data: product });
     } catch (err: any) {
         if (err instanceof HttpError)
             return res.status(err.status).json({ message: err.message });
