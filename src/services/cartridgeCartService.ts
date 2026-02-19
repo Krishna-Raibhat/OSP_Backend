@@ -95,6 +95,14 @@ export async function addToCart(input: {
 
   if (!product) throw new HttpError(404, "Product not found or inactive.");
 
+  // Check stock availability
+  if (product.quantity < quantity) {
+    throw new HttpError(
+      400, 
+      `Insufficient stock for "${product.product_name}". Available: ${product.quantity}, Requested: ${quantity}`
+    );
+  }
+
   const isDistributor = userRole === "distributor";
   const unit_price = isDistributor && product.special_price !== null 
     ? product.special_price 
@@ -107,6 +115,15 @@ export async function addToCart(input: {
 
   if (checkResult.rows[0]) {
     const newQuantity = checkResult.rows[0].quantity + quantity;
+    
+    // Check stock for updated quantity
+    if (product.quantity < newQuantity) {
+      throw new HttpError(
+        400, 
+        `Insufficient stock for "${product.product_name}". Available: ${product.quantity}, Total in cart would be: ${newQuantity}`
+      );
+    }
+    
     const updateQuery = `
       UPDATE cartridge_cart_items 
       SET quantity = $1, unit_price = $2, updated_at = NOW()

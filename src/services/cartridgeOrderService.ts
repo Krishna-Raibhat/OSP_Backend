@@ -36,6 +36,26 @@ export async function createOrder(input: CreateOrderInput) {
     throw new HttpError(400, "Order must have at least one item.");
   }
 
+  // Validate stock availability for all items BEFORE creating order
+  for (const item of items) {
+    const stockQuery = `SELECT quantity, product_name FROM cartridge_products WHERE id = $1;`;
+    const stockResult = await pool.query(stockQuery, [item.cartridge_product_id]);
+    
+    if (!stockResult.rows[0]) {
+      throw new HttpError(404, `Product not found.`);
+    }
+
+    const availableStock = stockResult.rows[0].quantity;
+    const productName = stockResult.rows[0].product_name;
+
+    if (availableStock < item.quantity) {
+      throw new HttpError(
+        400, 
+        `Insufficient stock for "${productName}". Available: ${availableStock}, Requested: ${item.quantity}`
+      );
+    }
+  }
+
   // Calculate total
   const total = items.reduce((sum, item) => sum + (item.unit_price * item.quantity), 0);
 
@@ -98,6 +118,14 @@ export async function createOrder(input: CreateOrderInput) {
         item.unit_price,
         JSON.stringify(serialNumbers), // Store as JSON array
       ]);
+
+      // Reduce stock quantity after order item is created
+      const updateStockQuery = `
+        UPDATE cartridge_products 
+        SET quantity = quantity - $1 
+        WHERE id = $2;
+      `;
+      await client.query(updateStockQuery, [item.quantity, item.cartridge_product_id]);
     }
 
     // Create payment record with success status

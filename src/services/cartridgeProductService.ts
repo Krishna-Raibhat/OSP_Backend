@@ -15,6 +15,7 @@ export async function createCartridgeProduct(
     description?: string | null;
     unit_price: number;
     special_price?: number | null;
+    quantity?: number;
     is_active?: boolean;
     created_by?: string | null;
   },
@@ -28,6 +29,7 @@ export async function createCartridgeProduct(
     description = null,
     unit_price,
     special_price = null,
+    quantity = 0,
     is_active = true,
     created_by = userId,
   } = input;
@@ -48,8 +50,8 @@ export async function createCartridgeProduct(
   try {
     const q = `
       INSERT INTO cartridge_products
-        (brand_id, category_id, product_name, model_number, description, unit_price, special_price, is_active, created_by)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+        (brand_id, category_id, product_name, model_number, description, unit_price, special_price, quantity, is_active, created_by)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
       RETURNING *;
     `;
     const values = [
@@ -60,6 +62,7 @@ export async function createCartridgeProduct(
       description,
       unit_price,
       special_price,
+      quantity,
       is_active,
       created_by,
     ];
@@ -131,6 +134,7 @@ export async function updateCartridgeProduct(input: {
   description?: string | null;
   unit_price?: number;
   special_price?: number | null;
+  quantity?: number;
   is_active?: boolean;
 }) {
   const { id, ...data } = input;
