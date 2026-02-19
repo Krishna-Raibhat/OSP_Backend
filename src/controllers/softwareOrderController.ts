@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import { HttpError } from "../utils/errors";
+import { HttpError, validateUUID } from "../utils/errors";
 import * as orderService from "../services/softwareOrderService";
 
 /* ==================== ORDER CONTROLLERS ==================== */
@@ -8,6 +8,7 @@ import * as orderService from "../services/softwareOrderService";
 export async function createOrderFromCart(req: Request, res: Response) {
   try {
     const user_id = req.user?.userId; // Optional - can be undefined for guests
+    const userRole = req.user?.role; // For price calculation
     const { billing_info, payment_method = "gateway", items } = req.body;
 
     if (!billing_info) {
@@ -22,8 +23,23 @@ export async function createOrderFromCart(req: Request, res: Response) {
 
     // If items provided, use them (guest checkout or direct items)
     if (items && Array.isArray(items) && items.length > 0) {
+      // Validate each item
+      for (const item of items) {
+        if (!item.software_plan_id) {
+          return res.status(400).json({ message: "Each item must have software_plan_id." });
+        }
+        validateUUID(item.software_plan_id, "Plan ID");
+        
+        const qty = Number(item.quantity);
+        if (isNaN(qty) || qty < 1) {
+          return res.status(400).json({ message: "Each item must have valid quantity." });
+        }
+        item.quantity = qty;
+      }
+
       result = await orderService.createOrder({
         user_id,
+        userRole,
         billing_info,
         items,
         payment_method,
@@ -39,6 +55,7 @@ export async function createOrderFromCart(req: Request, res: Response) {
 
       result = await orderService.createOrderFromCart({
         user_id,
+        userRole,
         billing_info,
         payment_method,
       });
@@ -59,8 +76,12 @@ export async function createOrderFromCart(req: Request, res: Response) {
 // Get order by ID (logged-in user)
 export async function getOrder(req: Request, res: Response) {
   try {
-    const user_id = req.user!.userId;
-    const order_id = String(req.params.order_id);
+    if (!req.user?.userId) {
+      return res.status(401).json({ message: "Unauthorized. Please log in." });
+    }
+
+    const user_id = req.user.userId;
+    const order_id = validateUUID(req.params.order_id, "Order ID");
 
     const order = await orderService.getOrderById(order_id, user_id);
     return res.status(200).json(order);
@@ -74,7 +95,11 @@ export async function getOrder(req: Request, res: Response) {
 // Get user's orders
 export async function getUserOrders(req: Request, res: Response) {
   try {
-    const user_id = req.user!.userId;
+    if (!req.user?.userId) {
+      return res.status(401).json({ message: "Unauthorized. Please log in." });
+    }
+
+    const user_id = req.user.userId;
 
     const orders = await orderService.getUserOrders(user_id);
     return res.status(200).json(orders);
@@ -94,6 +119,8 @@ export async function trackGuestOrder(req: Request, res: Response) {
       return res.status(400).json({ message: "order_id and email are required." });
     }
 
+    validateUUID(order_id, "Order ID");
+
     const order = await orderService.getGuestOrder(order_id, email);
     return res.status(200).json(order);
   } catch (err: any) {
@@ -108,11 +135,11 @@ export async function trackGuestOrder(req: Request, res: Response) {
 // Admin: Get all orders with filters
 export async function getAllOrdersAdmin(req: Request, res: Response) {
   try {
-    const { status, payment_method, limit, offset } = req.query;
+    const { status, payment_type, limit, offset } = req.query;
 
     const orders = await orderService.getAllOrders({
       status: status as string,
-      payment_method: payment_method as string,
+      payment_type: payment_type as string, // Changed from payment_method
       limit: limit ? Number(limit) : undefined,
       offset: offset ? Number(offset) : undefined,
     });
@@ -131,7 +158,7 @@ export async function getAllOrdersAdmin(req: Request, res: Response) {
 // Admin: Get order details with serial numbers
 export async function getOrderDetailsAdmin(req: Request, res: Response) {
   try {
-    const order_id = String(req.params.order_id);
+    const order_id = validateUUID(req.params.order_id, "Order ID");
 
     const orderDetails = await orderService.getOrderDetailsAdmin(order_id);
     return res.status(200).json(orderDetails);

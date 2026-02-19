@@ -1,8 +1,9 @@
 import { pool } from "../config/db";
-import { HttpError } from "../utils/errors";
-import type { SoftwareOrder, SoftwareOrderItem, SoftwareCartItem } from "../models/softwareModels";
+import { HttpError, validateEmail, validatePhone, validateStringLength, validateQuantity } from "../utils/errors";
+import type { SoftwareOrder } from "../models/softwareModels";
 import { generateBarcodeImage } from "../utils/barcodeGenerator";
 import { sendOrderConfirmationEmail } from "../utils/emailService";
+import { randomUUID } from "crypto";
 
 /* ==================== ORDER SERVICES ==================== */
 
@@ -15,35 +16,86 @@ interface BillingInfo {
 
 interface CreateOrderInput {
   user_id?: string; // Optional for guest orders
+  userRole?: string; // For price calculation
   billing_info: BillingInfo;
   items: Array<{
     software_plan_id: string;
     quantity: number;
-    unit_price: number;
   }>;
-  payment_method: "gateway" | "manual" | "cod"; // ✅ Added COD
+  payment_method: "gateway" | "cod";
 }
 
 // Create order from cart or direct checkout (with payment)
 export async function createOrder(input: CreateOrderInput) {
-  const { user_id, billing_info, items, payment_method } = input;
+  const { user_id, userRole, billing_info, items, payment_method } = input;
 
-  // Validate billing info
-  if (!billing_info.full_name || !billing_info.email || !billing_info.phone || !billing_info.address) {
-    throw new HttpError(400, "All billing information fields are required.");
-  }
+  // Validate billing info format
+  validateStringLength(billing_info.full_name, "Full name", 2, 100);
+  validateEmail(billing_info.email, "Email");
+  validatePhone(billing_info.phone, "Phone");
+  validateStringLength(billing_info.address, "Address", 5, 500);
 
+  // Validate items
   if (items.length === 0) {
     throw new HttpError(400, "Order must have at least one item.");
   }
+  if (items.length > 100) {
+    throw new HttpError(400, "Order cannot have more than 100 items.");
+  }
 
-  // Calculate total
-  const total = items.reduce((sum, item) => sum + (item.unit_price * item.quantity), 0);
+  // Validate quantities
+  for (const item of items) {
+    item.quantity = validateQuantity(item.quantity, "Item quantity");
+  }
 
   const client = await pool.connect();
 
   try {
     await client.query("BEGIN");
+
+    // Fetch plan prices from DB (NEVER trust client prices)
+    const planIds = items.map(item => item.software_plan_id);
+    const plansQuery = `
+      SELECT id, price, special_price, is_active 
+      FROM software_plans 
+      WHERE id = ANY($1::uuid[]);
+    `;
+    const plansResult = await client.query(plansQuery, [planIds]);
+    
+    if (plansResult.rows.length !== planIds.length) {
+      throw new HttpError(400, "One or more plans not found.");
+    }
+
+    const plansMap = new Map(plansResult.rows.map(p => [p.id, p]));
+
+    // Validate all plans are active and calculate total
+    let total = 0;
+    const validatedItems = items.map(item => {
+      const plan = plansMap.get(item.software_plan_id);
+      
+      if (!plan) {
+        throw new HttpError(404, `Plan ${item.software_plan_id} not found.`);
+      }
+      
+      if (!plan.is_active) {
+        throw new HttpError(400, `Plan ${item.software_plan_id} is not active.`);
+      }
+
+      // Calculate price based on user role (NEVER trust client)
+      const isDistributor = userRole === "distributor";
+      const unit_price = isDistributor && plan.special_price !== null 
+        ? plan.special_price 
+        : plan.price;
+
+      const itemTotal = unit_price * item.quantity;
+      total += itemTotal;
+
+      return {
+        software_plan_id: item.software_plan_id,
+        quantity: item.quantity,
+        unit_price,
+      };
+    });
 
     // Create order with paid status
     const orderQuery = `
@@ -72,11 +124,11 @@ export async function createOrder(input: CreateOrderInput) {
     const order = orderResult.rows[0];
 
     // Create order items (1 row per license based on quantity)
-    for (const item of items) {
+    for (const item of validatedItems) {
       // Create multiple rows based on quantity (1 row = 1 license)
       for (let i = 0; i < item.quantity; i++) {
-        // Generate serial number immediately
-        const serial = `SN-${Date.now()}-${Math.random().toString(36).substring(2, 11).toUpperCase()}`;
+        // Generate cryptographically secure serial number
+        const serial = `SN-${randomUUID().toUpperCase()}`;
 
         const itemQuery = `
           INSERT INTO software_order_items (
@@ -131,7 +183,7 @@ export async function createOrder(input: CreateOrderInput) {
           status,
           paid_at
         )
-        VALUES ($1, 'gateway', 'completed', NULL, NULL, $2, 'success', NOW())
+        VALUES ($1, 'gateway', NULL, NULL, NULL, $2, 'success', NOW())
         RETURNING *;
       `;
       const paymentResult = await client.query(paymentQuery, [order.id, total]);
@@ -202,17 +254,17 @@ export async function createOrder(input: CreateOrderInput) {
 // Create order from logged-in user's cart
 export async function createOrderFromCart(input: {
   user_id: string;
+  userRole?: string;
   billing_info: BillingInfo;
-  payment_method: "gateway" | "manual" | "cod"; // ✅ Added COD
+  payment_method: "gateway" | "cod";
 }) {
-  const { user_id, billing_info, payment_method } = input;
+  const { user_id, userRole, billing_info, payment_method } = input;
 
-  // Get user's cart items
+  // Get user's cart items (only plan_id and quantity, NOT price)
   const cartQuery = `
     SELECT 
       ci.software_plan_id,
-      ci.quantity,
-      ci.unit_price
+      ci.quantity
     FROM software_cart_items ci
     JOIN software_carts c ON ci.cart_id = c.id
     WHERE c.user_id = $1 AND c.status = 'active';
@@ -226,6 +278,7 @@ export async function createOrderFromCart(input: {
 
   return createOrder({
     user_id,
+    userRole,
     billing_info,
     items: cartResult.rows,
     payment_method,
@@ -347,11 +400,11 @@ export async function updateOrderStatus(order_id: string, status: "pending" | "p
 // Admin: Get all orders with filters
 export async function getAllOrders(filters?: {
   status?: string;
-  payment_method?: string;
+  payment_type?: string; // Changed from payment_method to match DB column
   limit?: number;
   offset?: number;
 }) {
-  const { status, payment_method, limit = 50, offset = 0 } = filters || {};
+  const { status, payment_type, limit = 50, offset = 0 } = filters || {};
 
   let whereConditions = [];
   let params: any[] = [];
@@ -363,9 +416,9 @@ export async function getAllOrders(filters?: {
     paramIndex++;
   }
 
-  if (payment_method) {
+  if (payment_type) {
     whereConditions.push(`p.payment_type = $${paramIndex}`);
-    params.push(payment_method);
+    params.push(payment_type);
     paramIndex++;
   }
 
@@ -527,8 +580,8 @@ export async function generateLicenses(order_id: string) {
   const itemsResult = await pool.query(itemsQuery, [order_id]);
 
   for (const item of itemsResult.rows) {
-    // Generate unique serial number (barcode will be generated from this)
-    const serial = `SN-${Date.now()}-${Math.random().toString(36).substring(2, 11).toUpperCase()}`;
+    // Generate cryptographically secure serial number
+    const serial = `SN-${randomUUID().toUpperCase()}`;
 
     const updateQuery = `
       UPDATE software_order_items 

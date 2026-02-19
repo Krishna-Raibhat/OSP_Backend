@@ -11,6 +11,11 @@ export type SoftwareBrand = {
   updated_at: string;
 };
 
+// Extended type for brands with category name (from JOIN queries)
+export type SoftwareBrandWithCategory = SoftwareBrand & {
+  category_name: string | null;
+};
+
 export type SoftwareCategory = {
   id: string;
   name: string;
@@ -28,6 +33,13 @@ export type SoftwareProduct = {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+};
+
+// Extended type for products with brand and category info (from JOIN queries)
+export type SoftwareProductWithDetails = SoftwareProduct & {
+  brand_name: string;
+  brand_thumbnail_url: string | null;
+  category_name: string;
 };
 
 export type SoftwarePlan = {

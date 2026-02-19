@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import { HttpError } from "../utils/errors";
+import { HttpError, validateUUID } from "../utils/errors";
 import * as paymentService from "../services/softwarePaymentService";
 
 /* ==================== PAYMENT CONTROLLERS ==================== */
@@ -12,6 +12,8 @@ export async function createCODPayment(req: Request, res: Response) {
     if (!order_id) {
       return res.status(400).json({ message: "order_id is required." });
     }
+
+    validateUUID(order_id, "Order ID");
 
     const payment = await paymentService.createCODPayment(order_id);
 
@@ -29,7 +31,7 @@ export async function createCODPayment(req: Request, res: Response) {
 // Get payment by order ID
 export async function getPaymentByOrderId(req: Request, res: Response) {
   try {
-    const { order_id } = req.params;
+    const order_id = validateUUID(req.params.order_id, "Order ID");
 
     const payment = await paymentService.getPaymentByOrderId(order_id);
     return res.status(200).json(payment);
@@ -55,7 +57,7 @@ export async function getPendingCODPayments(req: Request, res: Response) {
 // Admin: Confirm COD payment
 export async function confirmCODPayment(req: Request, res: Response) {
   try {
-    const { payment_id } = req.params;
+    const payment_id = validateUUID(req.params.payment_id, "Payment ID");
     const { manual_reference } = req.body;
 
     const result = await paymentService.confirmCODPayment({
@@ -81,6 +83,8 @@ export async function createManualPayment(req: Request, res: Response) {
         message: "order_id, amount, and manual_reference are required." 
       });
     }
+
+    validateUUID(order_id, "Order ID");
 
     const payment = await paymentService.createManualPayment({
       order_id,

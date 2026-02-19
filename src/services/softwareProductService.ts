@@ -1,7 +1,6 @@
 import { pool } from "../config/db";
-import { HttpError, isPgUniqueViolation } from "../utils/errors";
-import { getS3Url } from "../utils/s3Upload";
-import type { SoftwareProduct } from "../models/softwareModels";
+import { HttpError, isPgUniqueViolation, isPgForeignKeyViolation } from "../utils/errors";
+import type { SoftwareProduct, SoftwareProductWithDetails } from "../models/softwareModels";
 
 export async function createProduct(input: {
   brand_id?: string;
@@ -25,7 +24,7 @@ export async function createProduct(input: {
     const result = await pool.query<SoftwareProduct>(q, [
       brand_id,
       category_id,
-      name.trim(),
+      name.trim().toLowerCase(),
       description ?? null,
       is_active,
     ]);
@@ -33,6 +32,9 @@ export async function createProduct(input: {
   } catch (err: any) {
     if (isPgUniqueViolation(err)) {
       throw new HttpError(409, "Product name already exists.");
+    }
+    if (isPgForeignKeyViolation(err)) {
+      throw new HttpError(400, "Invalid brand ID or category ID.");
     }
     throw err;
   }
@@ -50,7 +52,7 @@ export async function getAllProducts() {
     JOIN software_categories c ON p.category_id = c.id
     ORDER BY p.created_at DESC;
   `;
-  const result = await pool.query(q);
+  const result = await pool.query<SoftwareProductWithDetails>(q);
   
   return result.rows;
 }
@@ -67,7 +69,7 @@ export async function getProductById(id: string) {
     JOIN software_categories c ON p.category_id = c.id
     WHERE p.id = $1;
   `;
-  const result = await pool.query(q, [id]);
+  const result = await pool.query<SoftwareProductWithDetails>(q, [id]);
   if (!result.rows[0]) throw new HttpError(404, "Product not found.");
   
   return result.rows[0];
@@ -86,7 +88,7 @@ export async function getProductsByBrand(brand_id: string) {
     WHERE p.brand_id = $1 
     ORDER BY p.name ASC;
   `;
-  const result = await pool.query(q, [brand_id]);
+  const result = await pool.query<SoftwareProductWithDetails>(q, [brand_id]);
   
   return result.rows;
 }
@@ -107,7 +109,7 @@ export async function updateProduct(input: {
 
   try {
     const updates: string[] = [];
-    const values: any[] = [];
+    const values: (string | boolean | null)[] = [];
     let paramIndex = 1;
 
     if (brand_id) {
@@ -120,7 +122,7 @@ export async function updateProduct(input: {
     }
     if (name) {
       updates.push(`name = $${paramIndex++}`);
-      values.push(name.trim());
+      values.push(name.trim().toLowerCase());
     }
     if (description !== undefined) {
       updates.push(`description = $${paramIndex++}`);
@@ -149,6 +151,9 @@ export async function updateProduct(input: {
     if (isPgUniqueViolation(err)) {
       throw new HttpError(409, "Product name already exists.");
     }
+    if (isPgForeignKeyViolation(err)) {
+      throw new HttpError(400, "Invalid brand ID or category ID.");
+    }
     throw err;
   }
 }
@@ -157,5 +162,5 @@ export async function deleteProduct(id: string) {
   const q = `DELETE FROM software_products WHERE id = $1 RETURNING *;`;
   const result = await pool.query<SoftwareProduct>(q, [id]);
   if (!result.rows[0]) throw new HttpError(404, "Product not found.");
-  return { message: "Product deleted successfully." };
+  return result.rows[0];
 }

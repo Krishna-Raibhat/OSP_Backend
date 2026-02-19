@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import { HttpError } from "../utils/errors";
+import { HttpError, validateUUID } from "../utils/errors";
 import * as categoryService from "../services/softwareCategoryService";
 
 export async function createCategory(req: Request, res: Response) {
@@ -18,6 +18,7 @@ export async function getAllCategories(req: Request, res: Response) {
     const data = await categoryService.getAllCategories();
     return res.status(200).json(data);
   } catch (err: any) {
+    if (err instanceof HttpError) return res.status(err.status).json({ message: err.message });
     console.error("Get categories error:", err);
     return res.status(500).json({ message: "Server error." });
   }
@@ -25,7 +26,7 @@ export async function getAllCategories(req: Request, res: Response) {
 
 export async function getCategoryById(req: Request, res: Response) {
   try {
-    const id = String(req.params.id);
+    const id = validateUUID(req.params.id, "Category ID");
     const data = await categoryService.getCategoryById(id);
     return res.status(200).json(data);
   } catch (err: any) {
@@ -37,7 +38,7 @@ export async function getCategoryById(req: Request, res: Response) {
 
 export async function updateCategory(req: Request, res: Response) {
   try {
-    const id = String(req.params.id);
+    const id = validateUUID(req.params.id, "Category ID");
     const data = await categoryService.updateCategory({ id, ...req.body });
     return res.status(200).json({ message: "Category updated successfully.", data });
   } catch (err: any) {
@@ -49,9 +50,9 @@ export async function updateCategory(req: Request, res: Response) {
 
 export async function deleteCategory(req: Request, res: Response) {
   try {
-    const id = String(req.params.id);
+    const id = validateUUID(req.params.id, "Category ID");
     const data = await categoryService.deleteCategory(id);
-    return res.status(200).json(data);
+    return res.status(200).json({ message: "Category deleted successfully.", data });
   } catch (err: any) {
     if (err instanceof HttpError) return res.status(err.status).json({ message: err.message });
     console.error("Delete category error:", err);

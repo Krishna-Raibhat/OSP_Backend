@@ -20,9 +20,26 @@ export async function getOrCreateCart(user_id: string) {
   return result.rows[0];
 }
 
+// Get existing cart without creating one
+export async function getExistingCart(user_id: string) {
+  const q = `SELECT * FROM software_carts WHERE user_id = $1 AND status = 'active';`;
+  const result = await pool.query<SoftwareCart>(q, [user_id]);
+  return result.rows[0] || null;
+}
+
 // Get cart with items (with plan details)
 export async function getCartWithItems(user_id: string, userRole?: string) {
-  const cart = await getOrCreateCart(user_id);
+  // Don't auto-create cart on GET - only return if exists
+  const cart = await getExistingCart(user_id);
+  
+  if (!cart) {
+    return {
+      cart: null,
+      items: [],
+      total: 0,
+      item_count: 0,
+    };
+  }
 
   const q = `
     SELECT 
@@ -55,7 +72,8 @@ export async function getCartWithItems(user_id: string, userRole?: string) {
       ? item.current_special_price 
       : item.current_price;
 
-    return {
+    // Build response object - hide special_price from non-distributors
+    const itemResponse: any = {
       id: item.id,
       cart_id: item.cart_id,
       software_plan_id: item.software_plan_id,
@@ -66,9 +84,16 @@ export async function getCartWithItems(user_id: string, userRole?: string) {
       unit_price: item.unit_price,
       quantity: item.quantity,
       subtotal: item.unit_price * item.quantity,
-      current_price: currentPrice, // Show current price for reference
+      current_price: currentPrice,
       price_changed: item.unit_price !== currentPrice,
     };
+
+    // Only show special price info to distributors
+    if (isDistributor && item.current_special_price !== null) {
+      itemResponse.current_special_price = item.current_special_price;
+    }
+
+    return itemResponse;
   });
 
   const total = items.reduce((sum, item) => sum + item.subtotal, 0);
@@ -79,6 +104,46 @@ export async function getCartWithItems(user_id: string, userRole?: string) {
     total,
     item_count: items.reduce((sum, item) => sum + item.quantity, 0),
   };
+}
+
+// Calculate prorated price based on remaining time
+function calculateProratedPrice(plan: SoftwarePlan, basePrice: number): number {
+  if (!plan.expiry_date) {
+    return basePrice;
+  }
+
+  const now = new Date();
+  const expiryDate = new Date(plan.expiry_date + 'T00:00:00Z'); // Parse as UTC to avoid timezone issues
+  
+  // If expired, throw error
+  if (expiryDate <= now) {
+    throw new HttpError(400, "This plan has expired and cannot be purchased.");
+  }
+
+  // If no start date, use current date
+  const startDate = plan.start_date 
+    ? new Date(plan.start_date + 'T00:00:00Z') 
+    : now;
+  
+  // Validate dates
+  if (startDate >= expiryDate) {
+    throw new HttpError(400, "Invalid plan dates: start date must be before expiry date.");
+  }
+  
+  // If start date is in the future, use start date as reference
+  const referenceDate = startDate > now ? startDate : now;
+  
+  // Calculate days (more accurate than months)
+  const totalDays = Math.ceil((expiryDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+  const remainingDays = Math.ceil((expiryDate.getTime() - referenceDate.getTime()) / (1000 * 60 * 60 * 24));
+  
+  // Only prorate if there's a meaningful difference (at least 1 day less)
+  if (totalDays > 0 && remainingDays > 0 && remainingDays < totalDays) {
+    const proratedPrice = (basePrice / totalDays) * remainingDays;
+    return Math.round(proratedPrice * 100) / 100; // Round to 2 decimals
+  }
+  
+  return basePrice;
 }
 
 // Add item to cart (with role-based pricing)
@@ -101,64 +166,64 @@ export async function addToCart(input: {
 
   // Determine base price based on user role
   const isDistributor = userRole === "distributor";
-  let basePrice = isDistributor && plan.special_price !== null 
+  const basePrice = isDistributor && plan.special_price !== null 
     ? plan.special_price 
     : plan.price;
 
   // Calculate prorated price if expiry date is set
-  let unit_price = basePrice;
-  if (plan.expiry_date) {
-    const now = new Date();
-    const expiryDate = new Date(plan.expiry_date);
+  const unit_price = calculateProratedPrice(plan, basePrice);
+
+  // Use transaction for cart creation and item upsert
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Get or create cart within transaction (handles race condition with unique index)
+    let cartQuery = `SELECT * FROM software_carts WHERE user_id = $1 AND status = 'active' FOR UPDATE;`;
+    let cartResult = await client.query<SoftwareCart>(cartQuery, [user_id]);
     
-    // Only prorate if expiry is in the future
-    if (expiryDate > now) {
-      const startDate = plan.start_date ? new Date(plan.start_date) : now;
-      
-      // Calculate remaining months
-      const totalMonths = (expiryDate.getFullYear() - startDate.getFullYear()) * 12 + 
-                         (expiryDate.getMonth() - startDate.getMonth());
-      const remainingMonths = (expiryDate.getFullYear() - now.getFullYear()) * 12 + 
-                             (expiryDate.getMonth() - now.getMonth()) + 1; // +1 to include current month
-      
-      if (totalMonths > 0 && remainingMonths > 0 && remainingMonths < totalMonths) {
-        // Prorate the price based on remaining months
-        unit_price = (basePrice / totalMonths) * remainingMonths;
-        unit_price = Math.round(unit_price * 100) / 100; // Round to 2 decimals
+    let cart = cartResult.rows[0];
+    if (!cart) {
+      // Try to create cart - if another transaction created it, this will fail and we'll retry
+      try {
+        const createCartQuery = `INSERT INTO software_carts (user_id, status) VALUES ($1, 'active') RETURNING *;`;
+        cartResult = await client.query<SoftwareCart>(createCartQuery, [user_id]);
+        cart = cartResult.rows[0];
+      } catch (err: any) {
+        // If unique constraint violation, another transaction created the cart - fetch it
+        if (err.code === '23505') {
+          cartQuery = `SELECT * FROM software_carts WHERE user_id = $1 AND status = 'active' FOR UPDATE;`;
+          cartResult = await client.query<SoftwareCart>(cartQuery, [user_id]);
+          cart = cartResult.rows[0];
+        } else {
+          throw err;
+        }
       }
-    } else {
-      throw new HttpError(400, "This plan has expired and cannot be purchased.");
     }
-  }
 
-  // Get or create cart
-  const cart = await getOrCreateCart(user_id);
-
-  // Check if item already exists in cart
-  const checkQuery = `SELECT * FROM software_cart_items WHERE cart_id = $1 AND software_plan_id = $2;`;
-  const checkResult = await pool.query<SoftwareCartItem>(checkQuery, [cart.id, software_plan_id]);
-
-  if (checkResult.rows[0]) {
-    // Update quantity
-    const newQuantity = checkResult.rows[0].quantity + quantity;
-    const updateQuery = `
-      UPDATE software_cart_items 
-      SET quantity = $1, unit_price = $2, updated_at = NOW()
-      WHERE id = $3
+    // Use UPSERT to handle concurrent inserts safely
+    // ON CONFLICT will update if item exists, insert if it doesn't
+    const upsertQuery = `
+      INSERT INTO software_cart_items (cart_id, software_plan_id, unit_price, quantity)
+      VALUES ($1, $2, $3, $4)
+      ON CONFLICT (cart_id, software_plan_id) 
+      DO UPDATE SET 
+        quantity = software_cart_items.quantity + EXCLUDED.quantity,
+        unit_price = EXCLUDED.unit_price,
+        updated_at = NOW()
       RETURNING *;
     `;
-    const result = await pool.query<SoftwareCartItem>(updateQuery, [newQuantity, unit_price, checkResult.rows[0].id]);
+    
+    const result = await client.query<SoftwareCartItem>(upsertQuery, [cart.id, software_plan_id, unit_price, quantity]);
+    
+    await client.query('COMMIT');
     return result.rows[0];
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
   }
-
-  // Add new item
-  const insertQuery = `
-    INSERT INTO software_cart_items (cart_id, software_plan_id, unit_price, quantity)
-    VALUES ($1, $2, $3, $4)
-    RETURNING *;
-  `;
-  const result = await pool.query<SoftwareCartItem>(insertQuery, [cart.id, software_plan_id, unit_price, quantity]);
-  return result.rows[0];
 }
 
 // Update cart item quantity
@@ -200,12 +265,16 @@ export async function removeCartItem(user_id: string, cart_item_id: string) {
 
   if (!result.rows[0]) throw new HttpError(404, "Cart item not found.");
 
-  return { message: "Item removed from cart." };
+  return result.rows[0];
 }
 
 // Clear cart
 export async function clearCart(user_id: string) {
-  const cart = await getOrCreateCart(user_id);
+  const cart = await getExistingCart(user_id);
+  
+  if (!cart) {
+    return { message: "Cart is already empty." };
+  }
 
   const q = `DELETE FROM software_cart_items WHERE cart_id = $1;`;
   await pool.query(q, [cart.id]);
@@ -216,17 +285,40 @@ export async function clearCart(user_id: string) {
 // Sync cart from frontend (when user logs in)
 export async function syncCart(input: {
   user_id: string;
-  items: Array<{ software_plan_id: string; quantity: number }>;
+  items: Array<{ software_plan_id: string; quantity: number | string }>;
   userRole?: string;
 }) {
   const { user_id, items, userRole } = input;
+
+  // Validate each item
+  for (const item of items) {
+    if (!item.software_plan_id || typeof item.software_plan_id !== 'string') {
+      throw new HttpError(400, "Each item must have a valid software_plan_id.");
+    }
+    
+    // Validate UUID format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(item.software_plan_id)) {
+      throw new HttpError(400, `Invalid UUID format for software_plan_id: ${item.software_plan_id}`);
+    }
+    
+    // Convert quantity to number if it's a string
+    const qty = typeof item.quantity === 'string' ? Number(item.quantity) : item.quantity;
+    
+    if (isNaN(qty) || qty < 1 || !Number.isInteger(qty)) {
+      throw new HttpError(400, `Each item must have a valid quantity (positive integer). Got: ${item.quantity}`);
+    }
+    
+    // Update the item with parsed quantity
+    item.quantity = qty;
+  }
 
   // Add each item to cart (will merge with existing)
   for (const item of items) {
     await addToCart({
       user_id,
       software_plan_id: item.software_plan_id,
-      quantity: item.quantity,
+      quantity: item.quantity as number,
       userRole,
     });
   }
