@@ -1,13 +1,13 @@
 import type { Request, Response } from "express";
 import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
-import { HttpError } from "../utils/errors";
+import { HttpError, validateUUID } from "../utils/errors";
 import * as brandService from "../services/softwareBrandService";
 import { uploadBrandImageToS3 } from "../utils/s3Upload";
 import { env } from "../utils/env";
 
 export async function createBrand(req: Request, res: Response) {
   try {
-    const { name, is_active } = req.body;
+    const { name, category_id, is_active } = req.body;
 
     if (!name) {
       return res.status(400).json({ message: "Brand name is required." });
@@ -18,13 +18,17 @@ export async function createBrand(req: Request, res: Response) {
       return res.status(400).json({ message: "Brand image is required." });
     }
 
+    // Convert is_active to boolean (handles string "true"/"false" from multipart/form-data)
+    const isActiveBoolean = is_active === "false" || is_active === false ? false : true;
+
     // Upload image to S3 first
     const { originalPath, thumbnailPath } = await uploadBrandImageToS3(req.file, name);
 
     // Create brand with image paths
     const brandData = await brandService.createBrand({
       name,
-      is_active,
+      category_id: category_id || undefined,
+      is_active: isActiveBoolean,
       thumbnail_url: thumbnailPath,
       original_url: originalPath,
     });
@@ -45,6 +49,7 @@ export async function getAllBrands(req: Request, res: Response) {
     const data = await brandService.getAllBrands();
     return res.status(200).json(data);
   } catch (err: any) {
+    if (err instanceof HttpError) return res.status(err.status).json({ message: err.message });
     console.error("Get brands error:", err);
     return res.status(500).json({ message: "Server error." });
   }
@@ -52,7 +57,7 @@ export async function getAllBrands(req: Request, res: Response) {
 
 export async function getBrandById(req: Request, res: Response) {
   try {
-    const id = String(req.params.id);
+    const id = validateUUID(req.params.id, "Brand ID");
     const data = await brandService.getBrandById(id);
     return res.status(200).json(data);
   } catch (err: any) {
@@ -64,17 +69,17 @@ export async function getBrandById(req: Request, res: Response) {
 
 export async function updateBrand(req: Request, res: Response) {
   try {
-    const id = String(req.params.id);
-    
-    // Get existing brand to get the name
-    const existingBrand = await brandService.getBrandById(id);
-    const brandName = req.body.name || existingBrand.name;
+    const id = validateUUID(req.params.id, "Brand ID");
     
     let thumbnail_url = undefined;
     let original_url = undefined;
 
     // Upload new image to S3 if provided
     if (req.file) {
+      // Get existing brand only if we need the name for S3 upload
+      const existingBrand = await brandService.getBrandById(id);
+      const brandName = req.body.name || existingBrand.name;
+      
       const { originalPath, thumbnailPath } = await uploadBrandImageToS3(req.file, brandName);
       original_url = originalPath;
       thumbnail_url = thumbnailPath;
@@ -100,9 +105,9 @@ export async function updateBrand(req: Request, res: Response) {
 
 export async function deleteBrand(req: Request, res: Response) {
   try {
-    const id = String(req.params.id);
+    const id = validateUUID(req.params.id, "Brand ID");
     const data = await brandService.deleteBrand(id);
-    return res.status(200).json(data);
+    return res.status(200).json({ message: "Brand deleted successfully.", data });
   } catch (err: any) {
     if (err instanceof HttpError) return res.status(err.status).json({ message: err.message });
     console.error("Delete brand error:", err);
@@ -159,6 +164,7 @@ export async function getBrandImage(req: Request, res: Response) {
     if (response.Body) {
       const stream = response.Body as any;
       stream.pipe(res);
+      return; // Early return to prevent double response
     } else {
       return res.status(404).json({ message: "Image not found." });
     }

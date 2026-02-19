@@ -14,13 +14,16 @@ export async function createBrand(input: {
   if (!name) throw new HttpError(400, "Brand name is required.");
 
   try {
+    // Normalize name to lowercase for case-insensitive uniqueness
+    const normalizedName = name.trim().toLowerCase();
+    
     const q = `
       INSERT INTO software_brands (name, category_id, thumbnail_url, original_url, is_active)
       VALUES ($1, $2, $3, $4, $5)
       RETURNING *;
     `;
     const result = await pool.query<SoftwareBrand>(q, [
-      name.trim(), 
+      normalizedName, 
       category_id ?? null,
       thumbnail_url ?? null, 
       original_url ?? null, 
@@ -32,6 +35,9 @@ export async function createBrand(input: {
   } catch (err: any) {
     if (isPgUniqueViolation(err)) {
       throw new HttpError(409, "Brand name already exists.");
+    }
+    if (isPgForeignKeyViolation(err)) {
+      throw new HttpError(400, "Invalid category ID.");
     }
     throw err;
   }
@@ -83,7 +89,8 @@ export async function updateBrand(input: {
 
     if (name) {
       updates.push(`name = $${paramIndex++}`);
-      values.push(name.trim());
+      // Normalize name to lowercase for case-insensitive uniqueness
+      values.push(name.trim().toLowerCase());
     }
     if (category_id !== undefined) {
       updates.push(`category_id = $${paramIndex++}`);
@@ -121,6 +128,9 @@ export async function updateBrand(input: {
     if (isPgUniqueViolation(err)) {
       throw new HttpError(409, "Brand name already exists.");
     }
+    if (isPgForeignKeyViolation(err)) {
+      throw new HttpError(400, "Invalid category ID.");
+    }
     throw err;
   }
 }
@@ -130,7 +140,7 @@ export async function deleteBrand(id: string) {
     const q = `DELETE FROM software_brands WHERE id = $1 RETURNING *;`;
     const result = await pool.query<SoftwareBrand>(q, [id]);
     if (!result.rows[0]) throw new HttpError(404, "Brand not found.");
-    return { message: "Brand deleted successfully." };
+    return result.rows[0];
   } catch (err: any) {
     if (err instanceof HttpError) throw err;
     if (isPgForeignKeyViolation(err)) {
