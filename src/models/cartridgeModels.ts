@@ -27,6 +27,7 @@ export type CartridgeProduct = {
   description: string | null;
   unit_price: number;
   special_price: number | null;
+  quantity: number; // Available stock/inventory
   is_active: boolean;
   created_by: string;
   created_at: string;
