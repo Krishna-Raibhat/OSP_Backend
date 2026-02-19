@@ -13,3 +13,22 @@ export function isPgUniqueViolation(err: any): boolean {
 export function isPgForeignKeyViolation(err: any): boolean {
   return err?.code === "23503"; // foreign_key_violation
 }
+
+// UUID validation helper
+export function isValidUUID(id: string): boolean {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(id);
+}
+
+export function validateUUID(id: string | string[] | undefined, fieldName: string = "ID"): string {
+  // Handle array case (shouldn't happen with route params, but TypeScript requires it)
+  const idString = Array.isArray(id) ? id[0] : id;
+  
+  if (!idString) {
+    throw new HttpError(400, `${fieldName} is required.`);
+  }
+  if (!isValidUUID(idString)) {
+    throw new HttpError(400, `Invalid ${fieldName} format.`);
+  }
+  return idString;
+}

@@ -84,7 +84,7 @@ export async function deleteCategory(id: string) {
     const q = `DELETE FROM software_categories WHERE id = $1 RETURNING *;`;
     const result = await pool.query<SoftwareCategory>(q, [id]);
     if (!result.rows[0]) throw new HttpError(404, "Category not found.");
-    return { message: "Category deleted successfully." };
+    return result.rows[0];
   } catch (err: any) {
     if (err instanceof HttpError) throw err;
     if (isPgForeignKeyViolation(err)) {
