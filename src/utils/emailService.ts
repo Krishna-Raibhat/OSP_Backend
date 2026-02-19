@@ -1,5 +1,9 @@
 import nodemailer from "nodemailer";
-import { env } from "./env";
+import dotenv from "dotenv";
+import path from "path";
+
+// Load environment variables with explicit path
+dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
 // Create transporter
 const transporter = nodemailer.createTransport({
@@ -113,19 +117,20 @@ export async function sendOrderConfirmationEmail(data: OrderEmailData) {
   <hr style="border: none; border-top: 1px solid #dee2e6; margin: 30px 0;">
 
   <p style="color: #7f8c8d; font-size: 14px;">
-    If you have any questions, please contact our support team.<br/>
+    If you have any questions, please contact our support team at <a href="mailto:${process.env.COMPANY_EMAIL || process.env.SMTP_USER}" style="color: #3498db;">${process.env.COMPANY_EMAIL || process.env.SMTP_USER}</a><br/>
+    ${process.env.COMPANY_WEBSITE ? `Visit our website: <a href="${process.env.COMPANY_WEBSITE}" style="color: #3498db;">${process.env.COMPANY_WEBSITE}</a><br/>` : ''}
     Thank you for choosing us!
   </p>
 
   <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #dee2e6; color: #95a5a6; font-size: 12px;">
-    <p>© 2026 Your Company. All rights reserved.</p>
+    <p>© 2026 ${process.env.COMPANY_NAME || 'Your Company'}. All rights reserved.</p>
   </div>
 </body>
 </html>
   `;
 
   const mailOptions = {
-    from: `"Your Company" <${process.env.SMTP_USER}>`,
+    from: `"${process.env.COMPANY_NAME || 'Your Company'}" <${process.env.COMPANY_EMAIL || process.env.SMTP_USER}>`,
     to: customerEmail,
     subject: `Order Confirmation - #${orderId.substring(0, 8)}`,
     html: htmlContent,
@@ -232,19 +237,20 @@ export async function sendActivationKeyEmail(data: ActivationEmailData) {
   <hr style="border: none; border-top: 1px solid #dee2e6; margin: 30px 0;">
 
   <p style="color: #7f8c8d; font-size: 14px;">
-    If you did not request this activation key, please contact our support team immediately.<br/>
+    If you did not request this activation key, please contact our support team immediately at <a href="mailto:${process.env.COMPANY_EMAIL || process.env.SMTP_USER}" style="color: #3498db;">${process.env.COMPANY_EMAIL || process.env.SMTP_USER}</a><br/>
+    ${process.env.COMPANY_WEBSITE ? `Visit our website: <a href="${process.env.COMPANY_WEBSITE}" style="color: #3498db;">${process.env.COMPANY_WEBSITE}</a><br/>` : ''}
     Thank you for choosing us!
   </p>
 
   <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #dee2e6; color: #95a5a6; font-size: 12px;">
-    <p>© 2026 Your Company. All rights reserved.</p>
+    <p>© 2026 ${process.env.COMPANY_NAME || 'Your Company'}. All rights reserved.</p>
   </div>
 </body>
 </html>
   `;
 
   const mailOptions = {
-    from: `"Your Company" <${process.env.SMTP_USER}>`,
+    from: `"${process.env.COMPANY_NAME || 'Your Company'}" <${process.env.COMPANY_EMAIL || process.env.SMTP_USER}>`,
     to: customerEmail,
     subject: `Activation Key - ${productName}`,
     html: htmlContent,
