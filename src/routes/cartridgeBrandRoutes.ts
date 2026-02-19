@@ -6,6 +6,7 @@ import { CartridgeBrandController} from "../controllers/cartridgeBrandController
 
 const router = Router();
 
+router.get("/image", CartridgeBrandController.getCartridgeBrandImage); // Public route to get images
 router.post("/", authMiddleware, requireAdmin, uploadBrandImage, CartridgeBrandController.createCartridgeBrand);
 router.get("/", authMiddleware, requireAdmin, CartridgeBrandController.getAllCartridgeBrands);
 router.get("/:id", authMiddleware, requireAdmin, CartridgeBrandController.getCartridgeBrandById);

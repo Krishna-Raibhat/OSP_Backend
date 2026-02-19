@@ -4,16 +4,28 @@ import type { CartridgeBrand } from "../models/cartridgeModels";
 
 export const CartridgeBrandService = {
 
-  async createCartridgeBrand(name: string, img_url?: string, is_active?: boolean) {
+  async createCartridgeBrand(input: { 
+    name: string; 
+    thumbnail_url?: string; 
+    original_url?: string; 
+    is_active?: boolean 
+  }) {
+    const { name, thumbnail_url, original_url, is_active = true } = input;
+
     if (!name) throw new HttpError(400, "Brand name is required.");
 
     try {
       const q = `
-        INSERT INTO cartridge_brands (name, img_url, is_active)
-        VALUES ($1, $2, $3)
+        INSERT INTO cartridge_brands (name, thumbnail_url, original_url, is_active)
+        VALUES ($1, $2, $3, $4)
         RETURNING *;
       `;
-      const result = await pool.query<CartridgeBrand>(q, [name.trim(), img_url ?? null, is_active ?? true]);
+      const result = await pool.query<CartridgeBrand>(q, [
+        name.trim(), 
+        thumbnail_url ?? null, 
+        original_url ?? null, 
+        is_active
+      ]);
       return result.rows[0];
     } catch (err: any) {
       if (isPgUniqueViolation(err)) {
@@ -24,7 +36,7 @@ export const CartridgeBrandService = {
   },
 
   async getAllCartridgeBrands() {
-    const q = `SELECT * FROM cartridge_brands ORDER BY created_at DESC;`;
+    const q = `SELECT * FROM cartridge_brands ORDER BY name ASC;`;
     const result = await pool.query<CartridgeBrand>(q);
     return result.rows;
   },
@@ -36,26 +48,56 @@ export const CartridgeBrandService = {
     return result.rows[0];
   },
 
-  async updateCartridgeBrand(id: string, data: { name: string; img_url?: string | null; is_active: boolean }) {
-    const { name, img_url, is_active } = data;
-    if (!name && typeof is_active !== "boolean" && img_url === undefined) {
-      throw new HttpError(400, "Any one of name, img_url or is_active is required.");
+  async updateCartridgeBrand(input: { 
+    id: string; 
+    name?: string; 
+    thumbnail_url?: string; 
+    original_url?: string; 
+    is_active?: boolean 
+  }) {
+    const { id, name, thumbnail_url, original_url, is_active } = input;
+
+    if (!name && thumbnail_url === undefined && original_url === undefined && is_active === undefined) {
+      throw new HttpError(400, "At least one field is required.");
     }
 
     try {
+      const updates: string[] = [];
+      const values: any[] = [];
+      let paramIndex = 1;
+
+      if (name) {
+        updates.push(`name = $${paramIndex++}`);
+        values.push(name.trim());
+      }
+      if (thumbnail_url !== undefined) {
+        updates.push(`thumbnail_url = $${paramIndex++}`);
+        values.push(thumbnail_url ?? null);
+      }
+      if (original_url !== undefined) {
+        updates.push(`original_url = $${paramIndex++}`);
+        values.push(original_url ?? null);
+      }
+      if (is_active !== undefined) {
+        updates.push(`is_active = $${paramIndex++}`);
+        values.push(is_active);
+      }
+
+      updates.push(`updated_at = NOW()`);
+      values.push(id);
+
       const q = `
         UPDATE cartridge_brands
-        SET name = COALESCE($1, name),
-            img_url = COALESCE($2, img_url),
-            is_active = COALESCE($3, is_active),
-            updated_at = NOW()
-        WHERE id = $4
+        SET ${updates.join(", ")}
+        WHERE id = $${paramIndex}
         RETURNING *;
-      `;  
-      const result = await pool.query<CartridgeBrand>(q, [name?.trim(), img_url ?? null, is_active, id]);
+      `;
+
+      const result = await pool.query<CartridgeBrand>(q, values);
       if (!result.rows[0]) throw new HttpError(404, "Brand not found.");
       return result.rows[0];
     } catch (err: any) {
+      if (err instanceof HttpError) throw err;
       if (isPgUniqueViolation(err)) {
         throw new HttpError(409, "Brand name already exists.");
       }
@@ -70,6 +112,7 @@ export const CartridgeBrandService = {
       if (!result.rows[0]) throw new HttpError(404, "Brand not found.");
       return { message: "Brand deleted successfully." };
     } catch (err: any) {
+      if (err instanceof HttpError) throw err;
       if (isPgForeignKeyViolation(err)) {
         throw new HttpError(400, "Cannot delete brand with associated cartridges.");
       }
@@ -77,7 +120,7 @@ export const CartridgeBrandService = {
     }
   },    
 
-  async  getBrandByName(name: string) {
+  async getBrandByName(name: string) {
     const q = `SELECT * FROM cartridge_brands WHERE name = $1;`;
     const result = await pool.query<CartridgeBrand>(q, [name.trim()]);
     if (!result.rows[0]) throw new HttpError(404, "Brand not found.");

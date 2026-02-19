@@ -78,7 +78,7 @@ export async function createCartridgeProduct(
 
 export async function getAllCartridgeProducts() {
   try {
-  const q = `SELECT p.*, b.name as brand_name, b.img_url as brand_image_url,
+  const q = `SELECT p.*, b.name as brand_name, b.original_url as brand_original_url,
   c.name as category_name FROM cartridge_products p LEFT JOIN cartridge_brands b ON p.brand_id = b.id
   LEFT JOIN cartridge_categories c ON p.category_id = c.id ORDER BY p.created_at DESC;`;
   const result = await pool.query<CartridgeProduct>(q);
@@ -92,7 +92,7 @@ catch (err) {
 export async function getCartridgeProductById(id: string) {
   try{
     
-    const q = `SELECT p.*, b.name as brand_name, b.img_url as brand_image_url, 
+    const q = `SELECT p.*, b.name as brand_name, b.original_url as brand_original_url, 
     c.name as category_name FROM cartridge_products p LEFT JOIN cartridge_brands b ON p.brand_id = b.id
     LEFT JOIN cartridge_categories c ON p.category_id = c.id WHERE p.id = $1;
     `;
@@ -109,7 +109,7 @@ export async function getCartridgeProductById(id: string) {
 export async function getCartridgeProductsByBrand(brand_id: string) {
   try{
 
-    const q = `SELECT p.*, b.name as brand_name, b.img_url as brand_image_url,
+    const q = `SELECT p.*, b.name as brand_name, b.original_url as brand_original_url,
     c.name as category_name FROM cartridge_products p LEFT JOIN cartridge_brands b ON p.brand_id = b.id
     LEFT JOIN cartridge_categories c ON p.category_id = c.id WHERE p.brand_id = $1 ORDER BY p.created_at DESC;
     `;
@@ -192,7 +192,7 @@ export async function deleteCartridgeProduct(id: string) {
 
 export async  function getProductByQrId(qrId : string) {
   try {
-    const q = `SELECT p.*, b.name as brand_name, b.img_url as brand_image_url,
+    const q = `SELECT p.*, b.name as brand_name, b.original_url as brand_original_url,
 c.name as category_name FROM cartridge_products p LEFT JOIN cartridge_brands b ON p.brand_id = b.id
 LEFT JOIN cartridge_categories c ON p.category_id = c.id
 INNER JOIN cartridge_product_qr q ON p.id = q.cartridge_product_id
