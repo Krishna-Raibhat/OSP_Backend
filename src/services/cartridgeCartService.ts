@@ -1,5 +1,5 @@
 import { pool } from "../config/db";
-import { HttpError } from "../utils/errors";
+import { HttpError, validateQuantity } from "../utils/errors";
 import type { CartridgeCart, CartridgeCartItem, CartridgeProduct } from "../models/cartridgeModels";
 
 /* ==================== CARTRIDGE CART SERVICES ==================== */
@@ -18,9 +18,26 @@ export async function getOrCreateCart(user_id: string) {
   return result.rows[0];
 }
 
-// Get cart with items
+// Get existing cart without creating one
+export async function getExistingCart(user_id: string) {
+  const q = `SELECT * FROM cartridge_carts WHERE user_id = $1 AND status = 'active';`;
+  const result = await pool.query<CartridgeCart>(q, [user_id]);
+  return result.rows[0] || null;
+}
+
+// Get cart with items (does NOT auto-create)
 export async function getCartWithItems(user_id: string, userRole?: string) {
-  const cart = await getOrCreateCart(user_id);
+  // Don't auto-create cart on GET - only return if exists
+  const cart = await getExistingCart(user_id);
+  
+  if (!cart) {
+    return {
+      cart: null,
+      items: [],
+      total: 0,
+      item_count: 0,
+    };
+  }
 
   const q = `
     SELECT 
@@ -34,6 +51,7 @@ export async function getCartWithItems(user_id: string, userRole?: string) {
       p.model_number,
       p.unit_price as current_price,
       p.special_price as current_special_price,
+      p.quantity as available_stock,
       b.name as brand_name,
       c.name as category_name
     FROM cartridge_cart_items ci
@@ -52,7 +70,8 @@ export async function getCartWithItems(user_id: string, userRole?: string) {
       ? item.current_special_price 
       : item.current_price;
 
-    return {
+    // Build response - hide special_price from non-distributors
+    const itemResponse: any = {
       id: item.id,
       cart_id: item.cart_id,
       cartridge_product_id: item.cartridge_product_id,
@@ -65,7 +84,16 @@ export async function getCartWithItems(user_id: string, userRole?: string) {
       subtotal: item.unit_price * item.quantity,
       current_price: currentPrice,
       price_changed: item.unit_price !== currentPrice,
+      available_stock: item.available_stock,
+      stock_sufficient: item.available_stock >= item.quantity,
     };
+
+    // Only show special price info to distributors
+    if (isDistributor && item.current_special_price !== null) {
+      itemResponse.current_special_price = item.current_special_price;
+    }
+
+    return itemResponse;
   });
 
   const total = items.reduce((sum, item) => sum + item.subtotal, 0);
@@ -78,94 +106,182 @@ export async function getCartWithItems(user_id: string, userRole?: string) {
   };
 }
 
-// Add item to cart
+// Add item to cart with transaction and stock locking
 export async function addToCart(input: {
   user_id: string;
   cartridge_product_id: string;
-  quantity: number;
+  quantity: number | string; // Accept both types
   userRole?: string;
 }) {
   const { user_id, cartridge_product_id, quantity, userRole } = input;
 
-  if (quantity < 1) throw new HttpError(400, "Quantity must be at least 1.");
+  // Validate quantity (handles both string and number)
+  const validatedQty = validateQuantity(quantity, "Quantity");
 
-  const productQuery = `SELECT * FROM cartridge_products WHERE id = $1 AND is_active = true;`;
-  const productResult = await pool.query<CartridgeProduct>(productQuery, [cartridge_product_id]);
-  const product = productResult.rows[0];
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
 
-  if (!product) throw new HttpError(404, "Product not found or inactive.");
+    // Lock product row and check stock (prevents race condition)
+    const productQuery = `
+      SELECT * FROM cartridge_products 
+      WHERE id = $1 AND is_active = true 
+      FOR UPDATE;
+    `;
+    const productResult = await client.query<CartridgeProduct>(productQuery, [cartridge_product_id]);
+    const product = productResult.rows[0];
 
-  // Check stock availability
-  if (product.quantity < quantity) {
-    throw new HttpError(
-      400, 
-      `Insufficient stock for "${product.product_name}". Available: ${product.quantity}, Requested: ${quantity}`
-    );
-  }
+    if (!product) {
+      throw new HttpError(404, "Product not found or inactive.");
+    }
 
-  const isDistributor = userRole === "distributor";
-  const unit_price = isDistributor && product.special_price !== null 
-    ? product.special_price 
-    : product.unit_price;
-
-  const cart = await getOrCreateCart(user_id);
-
-  const checkQuery = `SELECT * FROM cartridge_cart_items WHERE cart_id = $1 AND cartridge_product_id = $2;`;
-  const checkResult = await pool.query<CartridgeCartItem>(checkQuery, [cart.id, cartridge_product_id]);
-
-  if (checkResult.rows[0]) {
-    const newQuantity = checkResult.rows[0].quantity + quantity;
+    // Get or create cart within transaction
+    let cartQuery = `SELECT * FROM cartridge_carts WHERE user_id = $1 AND status = 'active' FOR UPDATE;`;
+    let cartResult = await client.query<CartridgeCart>(cartQuery, [user_id]);
     
-    // Check stock for updated quantity
-    if (product.quantity < newQuantity) {
+    let cart = cartResult.rows[0];
+    if (!cart) {
+      try {
+        const createCartQuery = `INSERT INTO cartridge_carts (user_id, status) VALUES ($1, 'active') RETURNING *;`;
+        cartResult = await client.query<CartridgeCart>(createCartQuery, [user_id]);
+        cart = cartResult.rows[0];
+      } catch (err: any) {
+        // If unique constraint violation, fetch the cart
+        if (err.code === '23505') {
+          cartQuery = `SELECT * FROM cartridge_carts WHERE user_id = $1 AND status = 'active' FOR UPDATE;`;
+          cartResult = await client.query<CartridgeCart>(cartQuery, [user_id]);
+          cart = cartResult.rows[0];
+        } else {
+          throw err;
+        }
+      }
+    }
+
+    // Check if item already in cart
+    const checkQuery = `
+      SELECT * FROM cartridge_cart_items 
+      WHERE cart_id = $1 AND cartridge_product_id = $2 
+      FOR UPDATE;
+    `;
+    const checkResult = await client.query<CartridgeCartItem>(checkQuery, [cart.id, cartridge_product_id]);
+    
+    const existingItem = checkResult.rows[0];
+    const finalQuantity = existingItem ? existingItem.quantity + validatedQty : validatedQty;
+
+    // Check stock availability with locked row
+    if (product.quantity < finalQuantity) {
       throw new HttpError(
         400, 
-        `Insufficient stock for "${product.product_name}". Available: ${product.quantity}, Total in cart would be: ${newQuantity}`
+        `Insufficient stock for "${product.product_name}". Available: ${product.quantity}, Requested: ${finalQuantity}`
       );
     }
+
+    // Calculate price based on role
+    const isDistributor = userRole === "distributor";
+    const unit_price = isDistributor && product.special_price !== null 
+      ? product.special_price 
+      : product.unit_price;
+
+    // Use UPSERT to handle concurrent inserts
+    const upsertQuery = `
+      INSERT INTO cartridge_cart_items (cart_id, cartridge_product_id, unit_price, quantity)
+      VALUES ($1, $2, $3, $4)
+      ON CONFLICT (cart_id, cartridge_product_id) 
+      DO UPDATE SET 
+        quantity = cartridge_cart_items.quantity + EXCLUDED.quantity,
+        unit_price = EXCLUDED.unit_price,
+        updated_at = NOW()
+      RETURNING *;
+    `;
     
+    const result = await client.query<CartridgeCartItem>(upsertQuery, [
+      cart.id, 
+      cartridge_product_id, 
+      unit_price, 
+      validatedQty
+    ]);
+
+    await client.query('COMMIT');
+    return result.rows[0];
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+// Update cart item quantity with stock check and price update
+export async function updateCartItem(input: {
+  user_id: string;
+  cart_item_id: string;
+  quantity: number | string; // Accept both types
+  userRole?: string;
+}) {
+  const { user_id, cart_item_id, quantity, userRole } = input;
+
+  // Validate quantity (handles both string and number)
+  const validatedQty = validateQuantity(quantity, "Quantity");
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Get cart item with product info and lock both rows
+    const itemQuery = `
+      SELECT 
+        ci.*,
+        p.quantity as available_stock,
+        p.product_name,
+        p.unit_price as current_price,
+        p.special_price as current_special_price,
+        c.user_id
+      FROM cartridge_cart_items ci
+      JOIN cartridge_products p ON ci.cartridge_product_id = p.id
+      JOIN cartridge_carts c ON ci.cart_id = c.id
+      WHERE ci.id = $1 AND c.user_id = $2 AND c.status = 'active'
+      FOR UPDATE OF ci, p;
+    `;
+    
+    const itemResult = await client.query(itemQuery, [cart_item_id, user_id]);
+    const item = itemResult.rows[0];
+
+    if (!item) {
+      throw new HttpError(404, "Cart item not found.");
+    }
+
+    // Check stock availability
+    if (item.available_stock < validatedQty) {
+      throw new HttpError(
+        400,
+        `Insufficient stock for "${item.product_name}". Available: ${item.available_stock}, Requested: ${validatedQty}`
+      );
+    }
+
+    // Calculate current price based on role
+    const isDistributor = userRole === "distributor";
+    const unit_price = isDistributor && item.current_special_price !== null 
+      ? item.current_special_price 
+      : item.current_price;
+
+    // Update quantity AND price
     const updateQuery = `
       UPDATE cartridge_cart_items 
       SET quantity = $1, unit_price = $2, updated_at = NOW()
       WHERE id = $3
       RETURNING *;
     `;
-    const result = await pool.query<CartridgeCartItem>(updateQuery, [newQuantity, unit_price, checkResult.rows[0].id]);
+
+    const result = await client.query<CartridgeCartItem>(updateQuery, [validatedQty, unit_price, cart_item_id]);
+
+    await client.query('COMMIT');
     return result.rows[0];
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
   }
-
-  const insertQuery = `
-    INSERT INTO cartridge_cart_items (cart_id, cartridge_product_id, unit_price, quantity)
-    VALUES ($1, $2, $3, $4)
-    RETURNING *;
-  `;
-  const result = await pool.query<CartridgeCartItem>(insertQuery, [cart.id, cartridge_product_id, unit_price, quantity]);
-  return result.rows[0];
-}
-
-// Update cart item quantity
-export async function updateCartItem(input: {
-  user_id: string;
-  cart_item_id: string;
-  quantity: number;
-}) {
-  const { user_id, cart_item_id, quantity } = input;
-
-  if (quantity < 1) throw new HttpError(400, "Quantity must be at least 1.");
-
-  const q = `
-    UPDATE cartridge_cart_items ci
-    SET quantity = $1, updated_at = NOW()
-    FROM cartridge_carts c
-    WHERE ci.id = $2 AND ci.cart_id = c.id AND c.user_id = $3 AND c.status = 'active'
-    RETURNING ci.*;
-  `;
-
-  const result = await pool.query<CartridgeCartItem>(q, [quantity, cart_item_id, user_id]);
-
-  if (!result.rows[0]) throw new HttpError(404, "Cart item not found.");
-
-  return result.rows[0];
 }
 
 // Remove item from cart
@@ -181,12 +297,16 @@ export async function removeCartItem(user_id: string, cart_item_id: string) {
 
   if (!result.rows[0]) throw new HttpError(404, "Cart item not found.");
 
-  return { message: "Item removed from cart." };
+  return result.rows[0];
 }
 
 // Clear cart
 export async function clearCart(user_id: string) {
-  const cart = await getOrCreateCart(user_id);
+  const cart = await getExistingCart(user_id);
+  
+  if (!cart) {
+    return { message: "Cart is already empty." };
+  }
 
   const q = `DELETE FROM cartridge_cart_items WHERE cart_id = $1;`;
   await pool.query(q, [cart.id]);
@@ -194,19 +314,37 @@ export async function clearCart(user_id: string) {
   return { message: "Cart cleared." };
 }
 
-// Sync cart from frontend
+// Sync cart from frontend with validation
 export async function syncCart(input: {
   user_id: string;
-  items: Array<{ cartridge_product_id: string; quantity: number }>;
+  items: Array<{ cartridge_product_id: string; quantity: number | string }>;
   userRole?: string;
 }) {
   const { user_id, items, userRole } = input;
 
+  // Validate each item
+  for (const item of items) {
+    if (!item.cartridge_product_id || typeof item.cartridge_product_id !== 'string') {
+      throw new HttpError(400, "Each item must have a valid cartridge_product_id.");
+    }
+    
+    // Validate UUID format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(item.cartridge_product_id)) {
+      throw new HttpError(400, `Invalid UUID format for cartridge_product_id: ${item.cartridge_product_id}`);
+    }
+    
+    // Validate and convert quantity
+    const qty = validateQuantity(item.quantity, "Item quantity");
+    item.quantity = qty;
+  }
+
+  // Add each item to cart
   for (const item of items) {
     await addToCart({
       user_id,
       cartridge_product_id: item.cartridge_product_id,
-      quantity: item.quantity,
+      quantity: item.quantity as number,
       userRole,
     });
   }

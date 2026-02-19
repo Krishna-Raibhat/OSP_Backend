@@ -102,21 +102,26 @@ export function validateStringLength(
   }
 }
 
-// Quantity validation helper
-export function validateQuantity(quantity: any, fieldName: string = "Quantity"): number {
+// Quantity validation helper (accepts any type for flexibility)
+export function validateQuantity(quantity: unknown, fieldName: string = "Quantity"): number {
+  // Handle null/undefined
+  if (quantity === null || quantity === undefined) {
+    throw new HttpError(400, `${fieldName} is required.`);
+  }
+
   const qty = Number(quantity);
   
   if (isNaN(qty)) {
-    throw new HttpError(400, `${fieldName} must be a number.`);
+    throw new HttpError(400, `${fieldName} must be a valid number. Received: ${quantity}`);
   }
   if (!Number.isInteger(qty)) {
-    throw new HttpError(400, `${fieldName} must be an integer.`);
+    throw new HttpError(400, `${fieldName} must be an integer. Received: ${quantity}`);
   }
   if (qty < 1) {
-    throw new HttpError(400, `${fieldName} must be at least 1.`);
+    throw new HttpError(400, `${fieldName} must be at least 1. Received: ${qty}`);
   }
   if (qty > 1000) {
-    throw new HttpError(400, `${fieldName} cannot exceed 1000.`);
+    throw new HttpError(400, `${fieldName} cannot exceed 1000. Received: ${qty}`);
   }
   
   return qty;

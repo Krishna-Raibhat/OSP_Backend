@@ -260,29 +260,242 @@ export async function createOrderFromCart(input: {
 }) {
   const { user_id, userRole, billing_info, payment_method } = input;
 
-  // Get user's cart items (only plan_id and quantity, NOT price)
-  const cartQuery = `
-    SELECT 
-      ci.software_plan_id,
-      ci.quantity
-    FROM software_cart_items ci
-    JOIN software_carts c ON ci.cart_id = c.id
-    WHERE c.user_id = $1 AND c.status = 'active';
-  `;
+  // Validate billing info format
+  validateStringLength(billing_info.full_name, "Full name", 2, 100);
+  validateEmail(billing_info.email, "Email");
+  validatePhone(billing_info.phone, "Phone");
+  validateStringLength(billing_info.address, "Address", 5, 500);
 
-  const cartResult = await pool.query(cartQuery, [user_id]);
+  const client = await pool.connect();
 
-  if (cartResult.rows.length === 0) {
-    throw new HttpError(400, "Cart is empty.");
+  try {
+    await client.query("BEGIN");
+
+    // Get user's cart items INSIDE transaction with lock to prevent double submit
+    const cartQuery = `
+      SELECT 
+        ci.software_plan_id,
+        ci.quantity
+      FROM software_cart_items ci
+      JOIN software_carts c ON ci.cart_id = c.id
+      WHERE c.user_id = $1 AND c.status = 'active'
+      FOR UPDATE OF ci; -- Lock cart items to prevent concurrent checkouts
+    `;
+
+    const cartResult = await client.query(cartQuery, [user_id]);
+
+    if (cartResult.rows.length === 0) {
+      throw new HttpError(400, "Cart is empty.");
+    }
+
+    const items = cartResult.rows;
+
+    // Validate quantities
+    for (const item of items) {
+      item.quantity = validateQuantity(item.quantity, "Item quantity");
+    }
+
+    if (items.length === 0) {
+      throw new HttpError(400, "Cart is empty.");
+    }
+    if (items.length > 100) {
+      throw new HttpError(400, "Order cannot have more than 100 items.");
+    }
+
+    // Fetch plan prices from DB (NEVER trust client prices)
+    const planIds = items.map(item => item.software_plan_id);
+    const plansQuery = `
+      SELECT id, price, special_price, is_active 
+      FROM software_plans 
+      WHERE id = ANY($1::uuid[]);
+    `;
+    const plansResult = await client.query(plansQuery, [planIds]);
+    
+    if (plansResult.rows.length !== planIds.length) {
+      throw new HttpError(400, "One or more plans not found.");
+    }
+
+    const plansMap = new Map(plansResult.rows.map(p => [p.id, p]));
+
+    // Validate all plans are active and calculate total
+    let total = 0;
+    const validatedItems = items.map(item => {
+      const plan = plansMap.get(item.software_plan_id);
+      
+      if (!plan) {
+        throw new HttpError(404, `Plan ${item.software_plan_id} not found.`);
+      }
+      
+      if (!plan.is_active) {
+        throw new HttpError(400, `Plan ${item.software_plan_id} is not active.`);
+      }
+
+      // Calculate price based on user role (NEVER trust client)
+      const isDistributor = userRole === "distributor";
+      const unit_price = isDistributor && plan.special_price !== null 
+        ? plan.special_price 
+        : plan.price;
+
+      const itemTotal = unit_price * item.quantity;
+      total += itemTotal;
+
+      return {
+        software_plan_id: item.software_plan_id,
+        quantity: item.quantity,
+        unit_price,
+      };
+    });
+
+    // Create order with paid status
+    const orderQuery = `
+      INSERT INTO software_orders (
+        buyer_user_id,
+        billing_full_name,
+        billing_email,
+        billing_phone,
+        billing_address,
+        status,
+        total
+      )
+      VALUES ($1, $2, $3, $4, $5, 'paid', $6)
+      RETURNING *;
+    `;
+
+    const orderResult = await client.query<SoftwareOrder>(orderQuery, [
+      user_id,
+      billing_info.full_name,
+      billing_info.email,
+      billing_info.phone,
+      billing_info.address,
+      total,
+    ]);
+
+    const order = orderResult.rows[0];
+
+    // Create order items (1 row per license based on quantity)
+    for (const item of validatedItems) {
+      // Create multiple rows based on quantity (1 row = 1 license)
+      for (let i = 0; i < item.quantity; i++) {
+        // Generate cryptographically secure serial number
+        const serial = `SN-${randomUUID().toUpperCase()}`;
+
+        const itemQuery = `
+          INSERT INTO software_order_items (
+            order_id,
+            software_plan_id,
+            unit_price,
+            serial_number
+          )
+          VALUES ($1, $2, $3, $4)
+          RETURNING *;
+        `;
+
+        await client.query(itemQuery, [
+          order.id,
+          item.software_plan_id,
+          item.unit_price,
+          serial,
+        ]);
+      }
+    }
+
+    // Create payment record with success status
+    let payment;
+    if (payment_method === "cod") {
+      // Create COD payment with success status
+      const paymentQuery = `
+        INSERT INTO software_payments (
+          software_order_id,
+          payment_type,
+          gateway,
+          gateway_txn_id,
+          manual_reference,
+          amount,
+          status,
+          paid_at
+        )
+        VALUES ($1, 'cod', NULL, NULL, 'Cash on Delivery', $2, 'success', NOW())
+        RETURNING *;
+      `;
+      const paymentResult = await client.query(paymentQuery, [order.id, total]);
+      payment = paymentResult.rows[0];
+    } else if (payment_method === "gateway") {
+      // Create gateway payment with success status
+      const paymentQuery = `
+        INSERT INTO software_payments (
+          software_order_id,
+          payment_type,
+          gateway,
+          gateway_txn_id,
+          manual_reference,
+          amount,
+          status,
+          paid_at
+        )
+        VALUES ($1, 'gateway', NULL, NULL, NULL, $2, 'success', NOW())
+        RETURNING *;
+      `;
+      const paymentResult = await client.query(paymentQuery, [order.id, total]);
+      payment = paymentResult.rows[0];
+    }
+
+    // Clear cart (inside transaction, before commit)
+    await client.query(
+      `DELETE FROM software_cart_items 
+       WHERE cart_id IN (SELECT id FROM software_carts WHERE user_id = $1 AND status = 'active')`,
+      [user_id]
+    );
+
+    await client.query(
+      `UPDATE software_carts SET status = 'checked_out' WHERE user_id = $1 AND status = 'active'`,
+      [user_id]
+    );
+
+    await client.query("COMMIT");
+
+    // Send order confirmation email with serial numbers
+    try {
+      // Get order items with product details
+      const itemsQuery = `
+        SELECT 
+          oi.serial_number,
+          oi.unit_price,
+          pl.plan_name,
+          p.name as product_name
+        FROM software_order_items oi
+        JOIN software_plans pl ON oi.software_plan_id = pl.id
+        JOIN software_products p ON pl.software_product_id = p.id
+        WHERE oi.order_id = $1;
+      `;
+      const itemsResult = await pool.query(itemsQuery, [order.id]);
+      
+      const orderItems = itemsResult.rows.map(item => ({
+        productName: item.product_name,
+        planName: item.plan_name,
+        serialNumber: item.serial_number,
+        price: item.unit_price,
+      }));
+
+      await sendOrderConfirmationEmail({
+        customerEmail: billing_info.email,
+        customerName: billing_info.full_name,
+        orderId: order.id,
+        orderItems,
+        total: total.toString(),
+        activationLink: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/activation`,
+      });
+    } catch (emailError) {
+      console.error("Failed to send order confirmation email:", emailError);
+      // Don't fail the order if email fails
+    }
+
+    return { order, payment };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
   }
-
-  return createOrder({
-    user_id,
-    userRole,
-    billing_info,
-    items: cartResult.rows,
-    payment_method,
-  });
 }
 
 // Get order by ID
