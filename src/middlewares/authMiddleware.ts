@@ -14,15 +14,16 @@ export function authMiddleware(
   _res: Response,
   next: NextFunction
 ) {
+  const authHeader = req.headers.authorization;
+
+  // Check for missing token BEFORE try/catch
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return next(new HttpError(401, "Unauthorized. No token provided."));
+  }
+
+  const token = authHeader.split(" ")[1];
+
   try {
-    const authHeader = req.headers.authorization;
-
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      throw new HttpError(401, "Unauthorized. No token provided.");
-    }
-
-    const token = authHeader.split(" ")[1];
-
     const decoded = jwt.verify(token, env.JWT_SECRET) as JwtPayload;
 
     // attach user to request
@@ -32,9 +33,10 @@ export function authMiddleware(
       role: decoded.role,
     };
 
-    next();
+    return next();
   } catch (err) {
-    next(new HttpError(401, "Invalid or expired token."));
+    // Only JWT verification errors reach here
+    return next(new HttpError(401, "Invalid or expired token."));
   }
 }
 
@@ -44,25 +46,28 @@ export function optionalAuthMiddleware(
   _res: Response,
   next: NextFunction
 ) {
+  const authHeader = req.headers.authorization;
+
+  // If no token, just continue without user
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return next();
+  }
+
+  const token = authHeader.split(" ")[1];
+
   try {
-    const authHeader = req.headers.authorization;
+    const decoded = jwt.verify(token, env.JWT_SECRET) as JwtPayload;
 
-    if (authHeader && authHeader.startsWith("Bearer ")) {
-      const token = authHeader.split(" ")[1];
-      const decoded = jwt.verify(token, env.JWT_SECRET) as JwtPayload;
+    // attach user to request if token is valid
+    req.user = {
+      userId: decoded.userId,
+      email: decoded.email,
+      role: decoded.role,
+    };
 
-      // attach user to request if token is valid
-      req.user = {
-        userId: decoded.userId,
-        email: decoded.email,
-        role: decoded.role,
-      };
-    }
-
-    // Continue regardless of token presence
-    next();
+    return next();
   } catch (err) {
-    // If token is invalid, just continue without user
-    next();
+    // If token is invalid, just continue without user (guest checkout)
+    return next();
   }
 }

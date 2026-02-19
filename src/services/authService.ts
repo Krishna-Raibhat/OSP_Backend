@@ -59,7 +59,10 @@ export async function registerUser(input: {
     if (!email) throw new HttpError(400, "Email is required.");
     if (!password) throw new HttpError(400, "Password is required.");
 
-    if (!isEmailValid(email)) throw new HttpError(400, "Invalid email format.");
+    // Clean and normalize email
+    const cleanEmail = email.trim().toLowerCase();
+
+    if (!isEmailValid(cleanEmail)) throw new HttpError(400, "Invalid email format.");
     if (phone && !isPhoneValid(phone)) {
       throw new HttpError(400, "Phone number must be exactly 10 digits.");
     }
@@ -81,7 +84,7 @@ export async function registerUser(input: {
     const result = await pool.query<UserRow>(q, [
       full_name.trim(),
       phone ?? null,
-      email.toLowerCase(),
+      cleanEmail,
       hashedPassword,
       role,
     ]);
@@ -123,6 +126,9 @@ export async function loginUser(input: { email?: string; password?: string }) {
   if (!email) throw new HttpError(400, "Email is required.");
   if (!password) throw new HttpError(400, "Password is required.");
 
+  // Clean and normalize email
+  const cleanEmail = email.trim().toLowerCase();
+
   const q = `
     SELECT id, full_name, phone, email, password_hash, role, status, created_at, updated_at
     FROM users
@@ -130,7 +136,7 @@ export async function loginUser(input: { email?: string; password?: string }) {
     LIMIT 1;
   `;
 
-  const result = await pool.query<UserRow>(q, [email.toLowerCase()]);
+  const result = await pool.query<UserRow>(q, [cleanEmail]);
   const user = result.rows[0];
 
   if (!user) throw new HttpError(401, "Invalid email or password.");
@@ -226,6 +232,12 @@ export async function changePassword(input: {
 
 /* ---------- GET ALL USERS BY ROLE ---------- */
 export async function getUsersByRole(role?: string) {
+  // Validate role if provided
+  const allowedRoles = new Set(["admin", "user", "distributor"]);
+  if (role && !allowedRoles.has(role)) {
+    throw new HttpError(400, "Invalid role. Must be one of: admin, user, distributor.");
+  }
+
   let q = `
     SELECT id, full_name, phone, email, role, status, created_at, updated_at
     FROM users
