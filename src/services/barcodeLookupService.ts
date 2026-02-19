@@ -97,8 +97,12 @@ export async function lookupSoftwareBySerial(serial_number: string) {
 }
 
 // Lookup cartridge purchase history by serial number
+// NOTE: Returns FIRST match if duplicate serials exist (LIMIT 1)
+// This is a known limitation of storing serials in JSON arrays
+// See migration 22 for details on future improvements
 export async function lookupCartridgeBySerial(serial_number: string) {
-  // First, find which order item contains this serial number
+  // Use jsonb_array_elements_text to safely search within JSON arrays
+  // This handles invalid JSON gracefully and allows proper indexing
   const itemQuery = `
     SELECT 
       oi.id as item_id,
@@ -127,78 +131,83 @@ export async function lookupCartridgeBySerial(serial_number: string) {
     JOIN cartridge_brands b ON p.brand_id = b.id
     JOIN cartridge_categories c ON p.category_id = c.id
     LEFT JOIN cartridge_payments pay ON o.id = pay.cartridge_order_id
-    WHERE oi.serial_number IS NOT NULL;
+    WHERE oi.serial_number IS NOT NULL
+      AND EXISTS (
+        SELECT 1 
+        FROM jsonb_array_elements_text(
+          CASE 
+            WHEN jsonb_typeof(oi.serial_number::jsonb) = 'array' 
+            THEN oi.serial_number::jsonb 
+            ELSE '[]'::jsonb 
+          END
+        ) AS serial
+        WHERE serial = $1
+      )
+    LIMIT 1;
   `;
 
-  const itemsResult = await pool.query(itemQuery);
+  try {
+    const itemsResult = await pool.query(itemQuery, [serial_number]);
 
-  // Find the item that contains this serial number in its JSON array
-  let matchedItem = null;
-  let matchedSerial = null;
-
-  for (const item of itemsResult.rows) {
-    try {
-      const serialNumbers = JSON.parse(item.serial_number);
-      if (serialNumbers.includes(serial_number)) {
-        matchedItem = item;
-        matchedSerial = serial_number;
-        break;
-      }
-    } catch (error) {
-      continue;
+    if (!itemsResult.rows[0]) {
+      throw new HttpError(404, "Serial number not found.");
     }
+
+    const matchedItem = itemsResult.rows[0];
+
+    // Get all orders from this customer
+    const customerOrdersQuery = `
+      SELECT 
+        o.id,
+        o.status,
+        o.total,
+        o.created_at,
+        COUNT(oi.id) as item_count
+      FROM cartridge_orders o
+      LEFT JOIN cartridge_order_items oi ON o.id = oi.order_id
+      WHERE o.billing_email = $1
+      GROUP BY o.id
+      ORDER BY o.created_at DESC;
+    `;
+
+    const customerOrders = await pool.query(customerOrdersQuery, [matchedItem.billing_email]);
+
+    return {
+      purchaser_name: matchedItem.billing_full_name,
+      serial_info: {
+        serial_number: serial_number,
+        product_name: matchedItem.product_name,
+        model_number: matchedItem.model_number,
+        brand_name: matchedItem.brand_name,
+        category_name: matchedItem.category_name,
+        unit_price: matchedItem.unit_price,
+        purchased_at: matchedItem.purchased_at,
+      },
+      order_info: {
+        order_id: matchedItem.order_id,
+        order_date: matchedItem.order_date,
+        order_status: matchedItem.order_status,
+        order_total: matchedItem.order_total,
+        payment_type: matchedItem.payment_type,
+        payment_status: matchedItem.payment_status,
+        paid_at: matchedItem.paid_at,
+      },
+      customer_info: {
+        full_name: matchedItem.billing_full_name,
+        email: matchedItem.billing_email,
+        phone: matchedItem.billing_phone,
+        address: matchedItem.billing_address,
+      },
+      purchase_history: {
+        total_orders: customerOrders.rows.length,
+        orders: customerOrders.rows,
+      },
+    };
+  } catch (error: any) {
+    // Handle invalid JSON gracefully
+    if (error.code === '22P02') { // invalid_text_representation (bad JSON)
+      throw new HttpError(500, "Data integrity error: Invalid serial number format in database.");
+    }
+    throw error;
   }
-
-  if (!matchedItem) {
-    throw new HttpError(404, "Serial number not found.");
-  }
-
-  // Get all orders from this customer
-  const customerOrdersQuery = `
-    SELECT 
-      o.id,
-      o.status,
-      o.total,
-      o.created_at,
-      COUNT(oi.id) as item_count
-    FROM cartridge_orders o
-    LEFT JOIN cartridge_order_items oi ON o.id = oi.order_id
-    WHERE o.billing_email = $1
-    GROUP BY o.id
-    ORDER BY o.created_at DESC;
-  `;
-
-  const customerOrders = await pool.query(customerOrdersQuery, [matchedItem.billing_email]);
-
-  return {
-    purchaser_name: matchedItem.billing_full_name,
-    serial_info: {
-      serial_number: matchedSerial,
-      product_name: matchedItem.product_name,
-      model_number: matchedItem.model_number,
-      brand_name: matchedItem.brand_name,
-      category_name: matchedItem.category_name,
-      unit_price: matchedItem.unit_price,
-      purchased_at: matchedItem.purchased_at,
-    },
-    order_info: {
-      order_id: matchedItem.order_id,
-      order_date: matchedItem.order_date,
-      order_status: matchedItem.order_status,
-      order_total: matchedItem.order_total,
-      payment_type: matchedItem.payment_type,
-      payment_status: matchedItem.payment_status,
-      paid_at: matchedItem.paid_at,
-    },
-    customer_info: {
-      full_name: matchedItem.billing_full_name,
-      email: matchedItem.billing_email,
-      phone: matchedItem.billing_phone,
-      address: matchedItem.billing_address,
-    },
-    purchase_history: {
-      total_orders: customerOrders.rows.length,
-      orders: customerOrders.rows,
-    },
-  };
 }
