@@ -94,3 +94,11 @@ export async function deleteCategory(id: string) {
     throw err;
   }
 }   
+
+export async function getCategoryByName(name: string) {
+  const q = `SELECT * FROM cartridge_categories WHERE name = $1;`;
+  const result = await pool.query<CartridgeCategory>(q, [name.trim()]);
+  if (!result.rows[0]) throw new HttpError(404, "Category not found.");
+  return result.rows[0];
+}
+
