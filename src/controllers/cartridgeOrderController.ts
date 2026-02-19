@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import { HttpError } from "../utils/errors";
+import { HttpError, validateUUID } from "../utils/errors";
 import * as orderService from "../services/cartridgeOrderService";
 
 /* ==================== CARTRIDGE ORDER CONTROLLERS ==================== */
@@ -8,6 +8,7 @@ import * as orderService from "../services/cartridgeOrderService";
 export async function createOrderFromCart(req: Request, res: Response) {
   try {
     const user_id = req.user?.userId; // Optional for guest
+    const userRole = req.user?.role; // For price calculation
     const { billing_info, items, payment_method = "gateway" } = req.body;
 
     if (!billing_info) {
@@ -22,8 +23,23 @@ export async function createOrderFromCart(req: Request, res: Response) {
 
     // If items provided: create order from items (guest or logged-in)
     if (items && Array.isArray(items) && items.length > 0) {
+      // Validate each item
+      for (const item of items) {
+        if (!item.cartridge_product_id) {
+          return res.status(400).json({ message: "Each item must have cartridge_product_id." });
+        }
+        validateUUID(item.cartridge_product_id, "Product ID");
+        
+        const qty = Number(item.quantity);
+        if (isNaN(qty) || qty < 1) {
+          return res.status(400).json({ message: "Each item must have valid quantity." });
+        }
+        item.quantity = qty;
+      }
+
       result = await orderService.createOrder({
         user_id,
+        userRole,
         billing_info,
         items,
         payment_method,
@@ -32,11 +48,14 @@ export async function createOrderFromCart(req: Request, res: Response) {
     // If no items: get from backend cart (logged-in only)
     else {
       if (!user_id) {
-        return res.status(401).json({ message: "Authentication required for cart checkout." });
+        return res.status(400).json({ 
+          message: "items array is required for guest checkout." 
+        });
       }
 
       result = await orderService.createOrderFromCart({
         user_id,
+        userRole,
         billing_info,
         payment_method,
       });
@@ -57,8 +76,12 @@ export async function createOrderFromCart(req: Request, res: Response) {
 // Get order by ID (logged-in user)
 export async function getOrder(req: Request, res: Response) {
   try {
-    const user_id = req.user!.userId;
-    const order_id = String(req.params.order_id);
+    if (!req.user?.userId) {
+      return res.status(401).json({ message: "Unauthorized. Please log in." });
+    }
+
+    const user_id = req.user.userId;
+    const order_id = validateUUID(req.params.order_id, "Order ID");
 
     const order = await orderService.getOrderById(order_id, user_id);
     return res.status(200).json(order);
@@ -72,7 +95,11 @@ export async function getOrder(req: Request, res: Response) {
 // Get user's orders
 export async function getUserOrders(req: Request, res: Response) {
   try {
-    const user_id = req.user!.userId;
+    if (!req.user?.userId) {
+      return res.status(401).json({ message: "Unauthorized. Please log in." });
+    }
+
+    const user_id = req.user.userId;
 
     const orders = await orderService.getUserOrders(user_id);
     return res.status(200).json(orders);
@@ -91,6 +118,8 @@ export async function trackGuestOrder(req: Request, res: Response) {
     if (!order_id || !email) {
       return res.status(400).json({ message: "order_id and email are required." });
     }
+
+    validateUUID(order_id, "Order ID");
 
     const order = await orderService.getGuestOrder(order_id, email);
     return res.status(200).json(order);
@@ -129,7 +158,7 @@ export async function getAllOrdersAdmin(req: Request, res: Response) {
 // Admin: Get order details
 export async function getOrderDetailsAdmin(req: Request, res: Response) {
   try {
-    const order_id = String(req.params.order_id);
+    const order_id = validateUUID(req.params.order_id, "Order ID");
 
     const orderDetails = await orderService.getOrderDetailsAdmin(order_id);
     return res.status(200).json(orderDetails);

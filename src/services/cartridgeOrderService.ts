@@ -1,7 +1,8 @@
 import { pool } from "../config/db";
-import { HttpError } from "../utils/errors";
+import { HttpError, validateEmail, validatePhone, validateStringLength, validateQuantity } from "../utils/errors";
 import type { CartridgeOrder } from "../models/cartridgeModels";
 import { generateBarcodeImage } from "../utils/barcodeGenerator";
+import { randomUUID } from "crypto";
 
 /* ==================== CARTRIDGE ORDER SERVICES ==================== */
 
@@ -14,55 +15,105 @@ interface BillingInfo {
 
 interface CreateOrderInput {
   user_id?: string; // Optional for guest orders
+  userRole?: string; // For price calculation
   billing_info: BillingInfo;
   items: Array<{
     cartridge_product_id: string;
     quantity: number;
-    unit_price: number;
   }>;
-  payment_method: "gateway" | "manual" | "cod";
+  payment_method: "gateway" | "cod";
 }
 
 // Create order from cart or direct checkout (with payment)
 export async function createOrder(input: CreateOrderInput) {
-  const { user_id, billing_info, items, payment_method } = input;
+  const { user_id, userRole, billing_info, items, payment_method } = input;
 
-  // Validate billing info
-  if (!billing_info.full_name || !billing_info.email || !billing_info.phone || !billing_info.address) {
-    throw new HttpError(400, "All billing information fields are required.");
-  }
+  // Validate billing info format
+  validateStringLength(billing_info.full_name, "Full name", 2, 100);
+  validateEmail(billing_info.email, "Email");
+  validatePhone(billing_info.phone, "Phone");
+  validateStringLength(billing_info.address, "Address", 5, 500);
 
+  // Validate items
   if (items.length === 0) {
     throw new HttpError(400, "Order must have at least one item.");
   }
-
-  // Validate stock availability for all items BEFORE creating order
-  for (const item of items) {
-    const stockQuery = `SELECT quantity, product_name FROM cartridge_products WHERE id = $1;`;
-    const stockResult = await pool.query(stockQuery, [item.cartridge_product_id]);
-    
-    if (!stockResult.rows[0]) {
-      throw new HttpError(404, `Product not found.`);
-    }
-
-    const availableStock = stockResult.rows[0].quantity;
-    const productName = stockResult.rows[0].product_name;
-
-    if (availableStock < item.quantity) {
-      throw new HttpError(
-        400, 
-        `Insufficient stock for "${productName}". Available: ${availableStock}, Requested: ${item.quantity}`
-      );
-    }
+  if (items.length > 100) {
+    throw new HttpError(400, "Order cannot have more than 100 items.");
   }
 
-  // Calculate total
-  const total = items.reduce((sum, item) => sum + (item.unit_price * item.quantity), 0);
+  // Validate quantities and merge duplicate product IDs
+  const mergedItemsMap = new Map<string, number>();
+  for (const item of items) {
+    const validatedQty = validateQuantity(item.quantity, "Item quantity");
+    const currentQty = mergedItemsMap.get(item.cartridge_product_id) || 0;
+    mergedItemsMap.set(item.cartridge_product_id, currentQty + validatedQty);
+  }
+
+  // Convert back to array
+  const mergedItems = Array.from(mergedItemsMap.entries()).map(([cartridge_product_id, quantity]) => ({
+    cartridge_product_id,
+    quantity,
+  }));
 
   const client = await pool.connect();
 
   try {
     await client.query("BEGIN");
+
+    // Fetch product prices from DB with row lock (NEVER trust client prices)
+    const productIds = mergedItems.map(item => item.cartridge_product_id);
+    const productsQuery = `
+      SELECT id, product_name, unit_price, special_price, quantity, is_active 
+      FROM cartridge_products 
+      WHERE id = ANY($1::uuid[])
+      FOR UPDATE; -- Lock rows to prevent race conditions
+    `;
+    const productsResult = await client.query(productsQuery, [productIds]);
+    
+    if (productsResult.rows.length !== productIds.length) {
+      throw new HttpError(400, "One or more products not found.");
+    }
+
+    const productsMap = new Map(productsResult.rows.map(p => [p.id, p]));
+
+    // Validate all products are active, check stock (with merged quantities), and calculate total
+    let total = 0;
+    const validatedItems = mergedItems.map(item => {
+      const product = productsMap.get(item.cartridge_product_id);
+      
+      if (!product) {
+        throw new HttpError(404, `Product ${item.cartridge_product_id} not found.`);
+      }
+      
+      if (!product.is_active) {
+        throw new HttpError(400, `Product "${product.product_name}" is not active.`);
+      }
+
+      // Check stock availability (now with merged/summed quantities)
+      if (product.quantity < item.quantity) {
+        throw new HttpError(
+          400, 
+          `Insufficient stock for "${product.product_name}". Available: ${product.quantity}, Requested: ${item.quantity}`
+        );
+      }
+
+      // Calculate price based on user role (NEVER trust client)
+      const isDistributor = userRole === "distributor";
+      const unit_price = isDistributor && product.special_price !== null 
+        ? product.special_price 
+        : product.unit_price;
+
+      const itemTotal = unit_price * item.quantity;
+      total += itemTotal;
+
+      return {
+        cartridge_product_id: item.cartridge_product_id,
+        quantity: item.quantity,
+        unit_price,
+        product_name: product.product_name,
+      };
+    });
 
     // Create order with paid status
     const orderQuery = `
@@ -91,11 +142,11 @@ export async function createOrder(input: CreateOrderInput) {
     const order = orderResult.rows[0];
 
     // Create order items with multiple serial numbers based on quantity
-    for (const item of items) {
-      // Generate multiple serial numbers based on quantity
+    for (const item of validatedItems) {
+      // Generate multiple cryptographically secure serial numbers based on quantity
       const serialNumbers = [];
       for (let i = 0; i < item.quantity; i++) {
-        const serial = `CART-SN-${Date.now()}-${Math.random().toString(36).substring(2, 11).toUpperCase()}-${i + 1}`;
+        const serial = `CART-${randomUUID().toUpperCase()}`;
         serialNumbers.push(serial);
       }
 
@@ -119,7 +170,7 @@ export async function createOrder(input: CreateOrderInput) {
         JSON.stringify(serialNumbers), // Store as JSON array
       ]);
 
-      // Reduce stock quantity after order item is created
+      // Reduce stock quantity (already locked with FOR UPDATE)
       const updateStockQuery = `
         UPDATE cartridge_products 
         SET quantity = quantity - $1 
@@ -161,7 +212,7 @@ export async function createOrder(input: CreateOrderInput) {
           status,
           paid_at
         )
-        VALUES ($1, 'gateway', 'completed', NULL, NULL, $2, 'success', NOW())
+        VALUES ($1, 'gateway', NULL, NULL, NULL, $2, 'success', NOW())
         RETURNING *;
       `;
       const paymentResult = await client.query(paymentQuery, [order.id, total]);
@@ -196,34 +247,242 @@ export async function createOrder(input: CreateOrderInput) {
 // Create order from logged-in user's cart
 export async function createOrderFromCart(input: {
   user_id: string;
+  userRole?: string;
   billing_info: BillingInfo;
-  payment_method: "gateway" | "manual" | "cod";
+  payment_method: "gateway" | "cod";
 }) {
-  const { user_id, billing_info, payment_method } = input;
+  const { user_id, userRole, billing_info, payment_method } = input;
 
-  // Get user's cart items
-  const cartQuery = `
-    SELECT 
-      ci.cartridge_product_id,
-      ci.quantity,
-      ci.unit_price
-    FROM cartridge_cart_items ci
-    JOIN cartridge_carts c ON ci.cart_id = c.id
-    WHERE c.user_id = $1 AND c.status = 'active';
-  `;
+  // Validate billing info format
+  validateStringLength(billing_info.full_name, "Full name", 2, 100);
+  validateEmail(billing_info.email, "Email");
+  validatePhone(billing_info.phone, "Phone");
+  validateStringLength(billing_info.address, "Address", 5, 500);
 
-  const cartResult = await pool.query(cartQuery, [user_id]);
+  const client = await pool.connect();
 
-  if (cartResult.rows.length === 0) {
-    throw new HttpError(400, "Cart is empty.");
+  try {
+    await client.query("BEGIN");
+
+    // Get user's cart items INSIDE transaction with lock to prevent double submit
+    const cartQuery = `
+      SELECT 
+        ci.cartridge_product_id,
+        ci.quantity
+      FROM cartridge_cart_items ci
+      JOIN cartridge_carts c ON ci.cart_id = c.id
+      WHERE c.user_id = $1 AND c.status = 'active'
+      FOR UPDATE OF ci; -- Lock cart items to prevent concurrent checkouts
+    `;
+
+    const cartResult = await client.query(cartQuery, [user_id]);
+
+    if (cartResult.rows.length === 0) {
+      throw new HttpError(400, "Cart is empty.");
+    }
+
+    const items = cartResult.rows;
+
+    // Validate quantities and merge duplicate product IDs
+    const mergedItemsMap = new Map<string, number>();
+    for (const item of items) {
+      const validatedQty = validateQuantity(item.quantity, "Item quantity");
+      const currentQty = mergedItemsMap.get(item.cartridge_product_id) || 0;
+      mergedItemsMap.set(item.cartridge_product_id, currentQty + validatedQty);
+    }
+
+    // Convert back to array
+    const mergedItems = Array.from(mergedItemsMap.entries()).map(([cartridge_product_id, quantity]) => ({
+      cartridge_product_id,
+      quantity,
+    }));
+
+    if (mergedItems.length === 0) {
+      throw new HttpError(400, "Cart is empty.");
+    }
+    if (mergedItems.length > 100) {
+      throw new HttpError(400, "Order cannot have more than 100 items.");
+    }
+
+    // Fetch product prices from DB with row lock (NEVER trust client prices)
+    const productIds = mergedItems.map(item => item.cartridge_product_id);
+    const productsQuery = `
+      SELECT id, product_name, unit_price, special_price, quantity, is_active 
+      FROM cartridge_products 
+      WHERE id = ANY($1::uuid[])
+      FOR UPDATE; -- Lock rows to prevent race conditions
+    `;
+    const productsResult = await client.query(productsQuery, [productIds]);
+    
+    if (productsResult.rows.length !== productIds.length) {
+      throw new HttpError(400, "One or more products not found.");
+    }
+
+    const productsMap = new Map(productsResult.rows.map(p => [p.id, p]));
+
+    // Validate all products are active, check stock (with merged quantities), and calculate total
+    let total = 0;
+    const validatedItems = mergedItems.map(item => {
+      const product = productsMap.get(item.cartridge_product_id);
+      
+      if (!product) {
+        throw new HttpError(404, `Product ${item.cartridge_product_id} not found.`);
+      }
+      
+      if (!product.is_active) {
+        throw new HttpError(400, `Product "${product.product_name}" is not active.`);
+      }
+
+      // Check stock availability (now with merged/summed quantities)
+      if (product.quantity < item.quantity) {
+        throw new HttpError(
+          400, 
+          `Insufficient stock for "${product.product_name}". Available: ${product.quantity}, Requested: ${item.quantity}`
+        );
+      }
+
+      // Calculate price based on user role (NEVER trust client)
+      const isDistributor = userRole === "distributor";
+      const unit_price = isDistributor && product.special_price !== null 
+        ? product.special_price 
+        : product.unit_price;
+
+      const itemTotal = unit_price * item.quantity;
+      total += itemTotal;
+
+      return {
+        cartridge_product_id: item.cartridge_product_id,
+        quantity: item.quantity,
+        unit_price,
+        product_name: product.product_name,
+      };
+    });
+
+    // Create order with paid status
+    const orderQuery = `
+      INSERT INTO cartridge_orders (
+        buyer_user_id,
+        billing_full_name,
+        billing_email,
+        billing_phone,
+        billing_address,
+        status,
+        total
+      )
+      VALUES ($1, $2, $3, $4, $5, 'paid', $6)
+      RETURNING *;
+    `;
+
+    const orderResult = await client.query<CartridgeOrder>(orderQuery, [
+      user_id,
+      billing_info.full_name,
+      billing_info.email,
+      billing_info.phone,
+      billing_info.address,
+      total,
+    ]);
+
+    const order = orderResult.rows[0];
+
+    // Create order items with multiple serial numbers based on quantity
+    for (const item of validatedItems) {
+      // Generate multiple cryptographically secure serial numbers based on quantity
+      const serialNumbers = [];
+      for (let i = 0; i < item.quantity; i++) {
+        const serial = `CART-${randomUUID().toUpperCase()}`;
+        serialNumbers.push(serial);
+      }
+
+      const itemQuery = `
+        INSERT INTO cartridge_order_items (
+          order_id,
+          cartridge_product_id,
+          quantity,
+          unit_price,
+          serial_number
+        )
+        VALUES ($1, $2, $3, $4, $5)
+        RETURNING *;
+      `;
+
+      await client.query(itemQuery, [
+        order.id,
+        item.cartridge_product_id,
+        item.quantity,
+        item.unit_price,
+        JSON.stringify(serialNumbers), // Store as JSON array
+      ]);
+
+      // Reduce stock quantity (already locked with FOR UPDATE)
+      const updateStockQuery = `
+        UPDATE cartridge_products 
+        SET quantity = quantity - $1 
+        WHERE id = $2;
+      `;
+      await client.query(updateStockQuery, [item.quantity, item.cartridge_product_id]);
+    }
+
+    // Create payment record with success status
+    let payment;
+    if (payment_method === "cod") {
+      // Create COD payment with success status
+      const paymentQuery = `
+        INSERT INTO cartridge_payments (
+          cartridge_order_id,
+          payment_type,
+          gateway,
+          gateway_txn_id,
+          manual_reference,
+          amount,
+          status,
+          paid_at
+        )
+        VALUES ($1, 'cod', NULL, NULL, 'Cash on Delivery', $2, 'success', NOW())
+        RETURNING *;
+      `;
+      const paymentResult = await client.query(paymentQuery, [order.id, total]);
+      payment = paymentResult.rows[0];
+    } else if (payment_method === "gateway") {
+      // Create gateway payment with success status
+      const paymentQuery = `
+        INSERT INTO cartridge_payments (
+          cartridge_order_id,
+          payment_type,
+          gateway,
+          gateway_txn_id,
+          manual_reference,
+          amount,
+          status,
+          paid_at
+        )
+        VALUES ($1, 'gateway', NULL, NULL, NULL, $2, 'success', NOW())
+        RETURNING *;
+      `;
+      const paymentResult = await client.query(paymentQuery, [order.id, total]);
+      payment = paymentResult.rows[0];
+    }
+
+    // Clear cart (inside transaction, before commit)
+    await client.query(
+      `DELETE FROM cartridge_cart_items 
+       WHERE cart_id IN (SELECT id FROM cartridge_carts WHERE user_id = $1 AND status = 'active')`,
+      [user_id]
+    );
+
+    await client.query(
+      `UPDATE cartridge_carts SET status = 'checked_out' WHERE user_id = $1 AND status = 'active'`,
+      [user_id]
+    );
+
+    await client.query("COMMIT");
+
+    return { order, payment };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
   }
-
-  return createOrder({
-    user_id,
-    billing_info,
-    items: cartResult.rows,
-    payment_method,
-  });
 }
 
 // Get order by ID
@@ -553,8 +812,12 @@ export async function generateCartridgeCodes(order_id: string) {
   const itemsResult = await pool.query(itemsQuery, [order_id]);
 
   for (const item of itemsResult.rows) {
-    // Generate unique serial number (barcode will be generated from this)
-    const serial = `CART-SN-${Date.now()}-${Math.random().toString(36).substring(2, 11).toUpperCase()}`;
+    // Generate multiple cryptographically secure serial numbers based on quantity
+    const serialNumbers = [];
+    for (let i = 0; i < item.quantity; i++) {
+      const serial = `CART-${randomUUID().toUpperCase()}`;
+      serialNumbers.push(serial);
+    }
 
     const updateQuery = `
       UPDATE cartridge_order_items 
@@ -564,7 +827,7 @@ export async function generateCartridgeCodes(order_id: string) {
       WHERE id = $2;
     `;
 
-    await pool.query(updateQuery, [serial, item.id]);
+    await pool.query(updateQuery, [JSON.stringify(serialNumbers), item.id]);
   }
 
   return { message: "Cartridge serial numbers generated successfully." };

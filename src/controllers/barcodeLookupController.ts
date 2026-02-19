@@ -7,7 +7,7 @@ import * as lookupService from "../services/barcodeLookupService";
 // Lookup software purchase by serial number
 export async function lookupSoftwareSerial(req: Request, res: Response) {
   try {
-    const { serial_number } = req.params;
+    const serial_number = String(req.params.serial_number);
 
     if (!serial_number) {
       return res.status(400).json({ message: "Serial number is required." });
@@ -25,7 +25,7 @@ export async function lookupSoftwareSerial(req: Request, res: Response) {
 // Lookup cartridge purchase by serial number
 export async function lookupCartridgeSerial(req: Request, res: Response) {
   try {
-    const { serial_number } = req.params;
+    const serial_number = String(req.params.serial_number);
 
     if (!serial_number) {
       return res.status(400).json({ message: "Serial number is required." });
@@ -43,7 +43,7 @@ export async function lookupCartridgeSerial(req: Request, res: Response) {
 // Universal lookup - tries both software and cartridge
 export async function lookupSerial(req: Request, res: Response) {
   try {
-    const { serial_number } = req.params;
+    const serial_number = String(req.params.serial_number);
 
     if (!serial_number) {
       return res.status(400).json({ message: "Serial number is required." });

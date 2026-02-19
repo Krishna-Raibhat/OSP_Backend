@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import { HttpError } from "../utils/errors";
+import { HttpError, validateUUID } from "../utils/errors";
 import * as cartService from "../services/cartridgeCartService";
 
 /* ==================== CARTRIDGE CART CONTROLLERS ==================== */
@@ -7,8 +7,13 @@ import * as cartService from "../services/cartridgeCartService";
 // Get user's cart
 export async function getCart(req: Request, res: Response) {
   try {
-    const user_id = req.user!.userId;
-    const userRole = req.user!.role;
+    // Safety check for auth middleware
+    if (!req.user?.userId) {
+      return res.status(401).json({ message: "Unauthorized. Please log in." });
+    }
+
+    const user_id = req.user.userId;
+    const userRole = req.user.role;
 
     const cart = await cartService.getCartWithItems(user_id, userRole);
     return res.status(200).json(cart);
@@ -22,18 +27,27 @@ export async function getCart(req: Request, res: Response) {
 // Add item to cart
 export async function addToCart(req: Request, res: Response) {
   try {
-    const user_id = req.user!.userId;
-    const userRole = req.user!.role;
+    // Safety check for auth middleware
+    if (!req.user?.userId) {
+      return res.status(401).json({ message: "Unauthorized. Please log in." });
+    }
+
+    const user_id = req.user.userId;
+    const userRole = req.user.role;
     const { cartridge_product_id, quantity = 1 } = req.body;
 
     if (!cartridge_product_id) {
       return res.status(400).json({ message: "cartridge_product_id is required." });
     }
 
+    // Validate UUID
+    validateUUID(cartridge_product_id, "Product ID");
+
+    // Service will validate quantity, just pass it through
     await cartService.addToCart({
       user_id,
       cartridge_product_id,
-      quantity: Number(quantity),
+      quantity,
       userRole,
     });
 
@@ -49,19 +63,27 @@ export async function addToCart(req: Request, res: Response) {
 // Update cart item quantity
 export async function updateCartItem(req: Request, res: Response) {
   try {
-    const user_id = req.user!.userId;
-    const userRole = req.user!.role;
-    const cart_item_id = String(req.params.cart_item_id);
+    // Safety check for auth middleware
+    if (!req.user?.userId) {
+      return res.status(401).json({ message: "Unauthorized. Please log in." });
+    }
+
+    const user_id = req.user.userId;
+    const userRole = req.user.role;
+    const cart_item_id = validateUUID(req.params.cart_item_id, "Cart item ID");
     const { quantity } = req.body;
 
-    if (!quantity) {
+    // Check for undefined/null (stricter than falsy check)
+    if (quantity === undefined || quantity === null) {
       return res.status(400).json({ message: "quantity is required." });
     }
 
+    // Service will validate quantity, just pass it through
     await cartService.updateCartItem({
       user_id,
       cart_item_id,
-      quantity: Number(quantity),
+      quantity,
+      userRole,
     });
 
     const cart = await cartService.getCartWithItems(user_id, userRole);
@@ -76,14 +98,19 @@ export async function updateCartItem(req: Request, res: Response) {
 // Remove item from cart
 export async function removeCartItem(req: Request, res: Response) {
   try {
-    const user_id = req.user!.userId;
-    const userRole = req.user!.role;
-    const cart_item_id = String(req.params.cart_item_id);
+    // Safety check for auth middleware
+    if (!req.user?.userId) {
+      return res.status(401).json({ message: "Unauthorized. Please log in." });
+    }
 
-    await cartService.removeCartItem(user_id, cart_item_id);
+    const user_id = req.user.userId;
+    const userRole = req.user.role;
+    const cart_item_id = validateUUID(req.params.cart_item_id, "Cart item ID");
+
+    const removedItem = await cartService.removeCartItem(user_id, cart_item_id);
 
     const cart = await cartService.getCartWithItems(user_id, userRole);
-    return res.status(200).json({ message: "Item removed.", cart });
+    return res.status(200).json({ message: "Item removed from cart.", data: removedItem, cart });
   } catch (err: any) {
     if (err instanceof HttpError) return res.status(err.status).json({ message: err.message });
     console.error("Remove cart item error:", err);
@@ -94,7 +121,12 @@ export async function removeCartItem(req: Request, res: Response) {
 // Clear cart
 export async function clearCart(req: Request, res: Response) {
   try {
-    const user_id = req.user!.userId;
+    // Safety check for auth middleware
+    if (!req.user?.userId) {
+      return res.status(401).json({ message: "Unauthorized. Please log in." });
+    }
+
+    const user_id = req.user.userId;
 
     await cartService.clearCart(user_id);
     return res.status(200).json({ message: "Cart cleared." });
@@ -108,8 +140,13 @@ export async function clearCart(req: Request, res: Response) {
 // Sync cart from frontend (when user logs in)
 export async function syncCart(req: Request, res: Response) {
   try {
-    const user_id = req.user!.userId;
-    const userRole = req.user!.role;
+    // Safety check for auth middleware
+    if (!req.user?.userId) {
+      return res.status(401).json({ message: "Unauthorized. Please log in." });
+    }
+
+    const user_id = req.user.userId;
+    const userRole = req.user.role;
     const { items } = req.body;
 
     if (!items || !Array.isArray(items)) {
