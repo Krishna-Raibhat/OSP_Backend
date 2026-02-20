@@ -93,3 +93,101 @@ export async function updateProfile(req: Request, res: Response) {
     return res.status(500).json({ message: "Server error." });
   }
 }
+
+
+/* ==================== ADMIN USER MANAGEMENT ==================== */
+
+// Admin: Get user by ID
+export async function getUserById(req: Request, res: Response) {
+  try {
+    const { id } = req.params;
+    
+    if (!id) {
+      return res.status(400).json({ message: "User ID is required." });
+    }
+
+    const { getUserById: getUser } = await import("../services/authService");
+    const user = await getUser(id);
+    return res.status(200).json(user);
+  } catch (err: any) {
+    if (err instanceof HttpError) return res.status(err.status).json({ message: err.message });
+    console.error("Get user by ID error:", err);
+    return res.status(500).json({ message: "Server error." });
+  }
+}
+
+// Admin: Update user
+export async function adminUpdateUser(req: Request, res: Response) {
+  try {
+    const { id } = req.params;
+    
+    if (!id) {
+      return res.status(400).json({ message: "User ID is required." });
+    }
+
+    const { adminUpdateUser: updateUser } = await import("../services/authService");
+    const user = await updateUser({ userId: id, ...req.body });
+    return res.status(200).json({ message: "User updated successfully.", user });
+  } catch (err: any) {
+    if (err instanceof HttpError) return res.status(err.status).json({ message: err.message });
+    console.error("Admin update user error:", err);
+    return res.status(500).json({ message: "Server error." });
+  }
+}
+
+// Admin: Delete user
+export async function adminDeleteUser(req: Request, res: Response) {
+  try {
+    const { id } = req.params;
+    
+    if (!id) {
+      return res.status(400).json({ message: "User ID is required." });
+    }
+
+    const { adminDeleteUser: deleteUser } = await import("../services/authService");
+    const user = await deleteUser(id);
+    return res.status(200).json({ message: "User deleted successfully.", user });
+  } catch (err: any) {
+    if (err instanceof HttpError) return res.status(err.status).json({ message: err.message });
+    console.error("Admin delete user error:", err);
+    return res.status(500).json({ message: "Server error." });
+  }
+}
+
+// Admin: Activate user
+export async function adminActivateUser(req: Request, res: Response) {
+  try {
+    const { id } = req.params;
+    
+    if (!id) {
+      return res.status(400).json({ message: "User ID is required." });
+    }
+
+    const { adminActivateUser: activateUser } = await import("../services/authService");
+    const user = await activateUser(id);
+    return res.status(200).json({ message: "User activated successfully.", user });
+  } catch (err: any) {
+    if (err instanceof HttpError) return res.status(err.status).json({ message: err.message });
+    console.error("Admin activate user error:", err);
+    return res.status(500).json({ message: "Server error." });
+  }
+}
+
+// Admin: Deactivate user
+export async function adminDeactivateUser(req: Request, res: Response) {
+  try {
+    const { id } = req.params;
+    
+    if (!id) {
+      return res.status(400).json({ message: "User ID is required." });
+    }
+
+    const { adminDeactivateUser: deactivateUser } = await import("../services/authService");
+    const user = await deactivateUser(id);
+    return res.status(200).json({ message: "User deactivated successfully.", user });
+  } catch (err: any) {
+    if (err instanceof HttpError) return res.status(err.status).json({ message: err.message });
+    console.error("Admin deactivate user error:", err);
+    return res.status(500).json({ message: "Server error." });
+  }
+}

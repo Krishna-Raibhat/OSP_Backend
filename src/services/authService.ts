@@ -334,3 +334,203 @@ export async function updateUserProfile(input: {
     throw err;
   }
 }
+
+
+/* ==================== ADMIN USER MANAGEMENT ==================== */
+
+/* ---------- ADMIN: GET USER BY ID ---------- */
+export async function getUserById(userId: string) {
+  const q = `
+    SELECT id, full_name, phone, email, role, status, created_at, updated_at
+    FROM users
+    WHERE id = $1
+    LIMIT 1;
+  `;
+
+  const result = await pool.query<UserRow>(q, [userId]);
+  const user = result.rows[0];
+
+  if (!user) throw new HttpError(404, "User not found.");
+
+  return {
+    id: user.id,
+    full_name: user.full_name,
+    email: user.email,
+    phone: user.phone,
+    role: user.role,
+    status: user.status,
+    created_at: user.created_at,
+    updated_at: user.updated_at,
+  };
+}
+
+/* ---------- ADMIN: UPDATE USER ---------- */
+export async function adminUpdateUser(input: {
+  userId: string;
+  full_name?: string;
+  phone?: string;
+  email?: string;
+  role?: UserRole;
+  status?: "active" | "suspended";
+}) {
+  const { userId, full_name, phone, email, role, status } = input;
+
+  if (!full_name && !phone && !email && !role && !status) {
+    throw new HttpError(400, "At least one field is required to update.");
+  }
+
+  // Validate phone if provided
+  if (phone && !isPhoneValid(phone)) {
+    throw new HttpError(400, "Phone number must be exactly 10 digits.");
+  }
+
+  // Validate email if provided
+  if (email && !isEmailValid(email)) {
+    throw new HttpError(400, "Invalid email format.");
+  }
+
+  // Validate role if provided
+  if (role && !["admin", "user", "distributor"].includes(role)) {
+    throw new HttpError(400, "Invalid role. Must be one of: admin, user, distributor.");
+  }
+
+  // Validate status if provided
+  if (status && !["active", "suspended"].includes(status)) {
+    throw new HttpError(400, "Invalid status. Must be either 'active' or 'suspended'.");
+  }
+
+  try {
+    const updates: string[] = [];
+    const values: any[] = [];
+    let paramIndex = 1;
+
+    if (full_name) {
+      updates.push(`full_name = $${paramIndex++}`);
+      values.push(full_name.trim());
+    }
+
+    if (phone) {
+      updates.push(`phone = $${paramIndex++}`);
+      values.push(phone);
+    }
+
+    if (email) {
+      updates.push(`email = $${paramIndex++}`);
+      values.push(email.trim().toLowerCase());
+    }
+
+    if (role) {
+      updates.push(`role = $${paramIndex++}`);
+      values.push(role);
+    }
+
+    if (status) {
+      updates.push(`status = $${paramIndex++}`);
+      values.push(status);
+    }
+
+    updates.push(`updated_at = NOW()`);
+    values.push(userId);
+
+    const q = `
+      UPDATE users
+      SET ${updates.join(", ")}
+      WHERE id = $${paramIndex}
+      RETURNING id, full_name, phone, email, role, status, created_at, updated_at;
+    `;
+
+    const result = await pool.query<UserRow>(q, values);
+    const user = result.rows[0];
+
+    if (!user) throw new HttpError(404, "User not found.");
+
+    return {
+      id: user.id,
+      full_name: user.full_name,
+      email: user.email,
+      phone: user.phone,
+      role: user.role,
+      status: user.status,
+      created_at: user.created_at,
+      updated_at: user.updated_at,
+    };
+  } catch (err: any) {
+    if (err instanceof HttpError) throw err;
+
+    if (isPgUniqueViolation(err)) {
+      const detail = String(err.detail || "");
+      if (detail.includes("(email)")) throw new HttpError(409, "Email already exists.");
+      if (detail.includes("(phone)")) throw new HttpError(409, "Phone already exists.");
+      throw new HttpError(409, "Duplicate value already exists.");
+    }
+
+    throw err;
+  }
+}
+
+/* ---------- ADMIN: DELETE USER ---------- */
+export async function adminDeleteUser(userId: string) {
+  const q = `
+    DELETE FROM users
+    WHERE id = $1
+    RETURNING id, full_name, email, role;
+  `;
+
+  const result = await pool.query<UserRow>(q, [userId]);
+  const user = result.rows[0];
+
+  if (!user) throw new HttpError(404, "User not found.");
+
+  return {
+    id: user.id,
+    full_name: user.full_name,
+    email: user.email,
+    role: user.role,
+  };
+}
+
+/* ---------- ADMIN: ACTIVATE USER ---------- */
+export async function adminActivateUser(userId: string) {
+  const q = `
+    UPDATE users
+    SET status = 'active', updated_at = NOW()
+    WHERE id = $1
+    RETURNING id, full_name, email, role, status;
+  `;
+
+  const result = await pool.query<UserRow>(q, [userId]);
+  const user = result.rows[0];
+
+  if (!user) throw new HttpError(404, "User not found.");
+
+  return {
+    id: user.id,
+    full_name: user.full_name,
+    email: user.email,
+    role: user.role,
+    status: user.status,
+  };
+}
+
+/* ---------- ADMIN: DEACTIVATE USER ---------- */
+export async function adminDeactivateUser(userId: string) {
+  const q = `
+    UPDATE users
+    SET status = 'suspended', updated_at = NOW()
+    WHERE id = $1
+    RETURNING id, full_name, email, role, status;
+  `;
+
+  const result = await pool.query<UserRow>(q, [userId]);
+  const user = result.rows[0];
+
+  if (!user) throw new HttpError(404, "User not found.");
+
+  return {
+    id: user.id,
+    full_name: user.full_name,
+    email: user.email,
+    role: user.role,
+    status: user.status,
+  };
+}
