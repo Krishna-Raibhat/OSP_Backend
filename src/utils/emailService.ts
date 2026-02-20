@@ -265,3 +265,88 @@ export async function sendActivationKeyEmail(data: ActivationEmailData) {
     return false;
   }
 }
+
+interface ContactUsData {
+  fullName: string;
+  email: string;
+  phone: string;
+  message: string;
+}
+
+export async function sendContactUsEmail(data: ContactUsData) {
+  const { fullName, email, phone, message } = data;
+
+  const htmlContent = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Contact Us Message</title>
+</head>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <div style="background-color: #f8f9fa; padding: 20px; border-radius: 5px; margin-bottom: 20px;">
+    <h1 style="color: #2c3e50; margin: 0;">📧 New Contact Us Message</h1>
+    <p style="color: #7f8c8d; margin: 5px 0 0 0;">Received: ${new Date().toLocaleString()}</p>
+  </div>
+
+  <div style="background-color: #e8f5e9; padding: 20px; border-radius: 5px; margin: 20px 0; border-left: 4px solid #27ae60;">
+    <h3 style="margin-top: 0; color: #27ae60;">👤 Contact Information</h3>
+    <table style="width: 100%; border-collapse: collapse;">
+      <tr>
+        <td style="padding: 8px 0; font-weight: bold; width: 30%;">Full Name:</td>
+        <td style="padding: 8px 0;">${fullName}</td>
+      </tr>
+      <tr>
+        <td style="padding: 8px 0; font-weight: bold;">Email:</td>
+        <td style="padding: 8px 0;"><a href="mailto:${email}" style="color: #3498db;">${email}</a></td>
+      </tr>
+      <tr>
+        <td style="padding: 8px 0; font-weight: bold;">Phone:</td>
+        <td style="padding: 8px 0;"><a href="tel:${phone}" style="color: #3498db;">${phone}</a></td>
+      </tr>
+    </table>
+  </div>
+
+  <div style="background-color: #fff3cd; padding: 20px; border-radius: 5px; margin: 20px 0; border-left: 4px solid #ffc107;">
+    <h3 style="margin-top: 0; color: #856404;">💬 Message</h3>
+    <div style="background-color: white; padding: 15px; border-radius: 3px; white-space: pre-wrap; font-size: 14px; line-height: 1.6;">
+${message}
+    </div>
+  </div>
+
+  <div style="background-color: #e3f2fd; padding: 15px; border-radius: 5px; margin: 20px 0; border-left: 4px solid #2196f3;">
+    <p style="margin: 0;"><strong>💡 Quick Actions:</strong></p>
+    <p style="margin: 10px 0 0 0;">
+      <a href="mailto:${email}?subject=Re: Your Contact Us Message" style="display: inline-block; padding: 8px 16px; background-color: #3498db; color: white; text-decoration: none; border-radius: 3px; margin-right: 10px;">Reply via Email</a>
+      <a href="tel:${phone}" style="display: inline-block; padding: 8px 16px; background-color: #27ae60; color: white; text-decoration: none; border-radius: 3px;">Call Customer</a>
+    </p>
+  </div>
+
+  <hr style="border: none; border-top: 1px solid #dee2e6; margin: 30px 0;">
+
+  <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #dee2e6; color: #95a5a6; font-size: 12px;">
+    <p>This message was sent via the Contact Us form on ${process.env.COMPANY_WEBSITE || 'your website'}</p>
+    <p>© 2026 ${process.env.COMPANY_NAME || 'Your Company'}. All rights reserved.</p>
+  </div>
+</body>
+</html>
+  `;
+
+  const mailOptions = {
+    from: `"${process.env.COMPANY_NAME || 'Your Company'}" <${process.env.COMPANY_EMAIL || process.env.SMTP_USER}>`,
+    to: process.env.COMPANY_EMAIL || process.env.SMTP_USER, // Send to company email
+    replyTo: email, // Allow direct reply to customer
+    subject: `Contact Us: Message from ${fullName}`,
+    html: htmlContent,
+  };
+
+  try {
+    await transporter.sendMail(mailOptions);
+    console.log(`Contact us email sent from ${email} (${fullName})`);
+    return true;
+  } catch (error) {
+    console.error("Error sending contact us email:", error);
+    return false;
+  }
+}

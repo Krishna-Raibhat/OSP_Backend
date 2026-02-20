@@ -22,6 +22,8 @@ import cartridgeOrderRoutes from "./src/routes/cartridgeOrderRoutes";
 import cartridgePaymentRoutes from "./src/routes/cartridgePaymentRoutes";
 import barcodeLookupRoutes from "./src/routes/barcodeLookupRoutes";
 import activationRoutes from "./src/routes/activationRoutes";
+import { sendContactMessage } from "./src/controllers/contactController";
+import { contactRateLimit, generalRateLimit } from "./src/middlewares/rateLimitMiddleware";
 
 dotenv.config();
 
@@ -44,11 +46,14 @@ app.use(
 );
 
 // 📦 Body parsing
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // 📄 Logger
 app.use(morgan("dev"));
+
+// 🛡️ Rate limiting
+app.use(generalRateLimit);
 
 // 🔗 Routes
 app.use("/api/auth", authRoutes);
@@ -69,6 +74,9 @@ app.use("/api/cartridge/orders", cartridgeOrderRoutes);
 app.use("/api/cartridge/payments", cartridgePaymentRoutes);
 app.use("/api/barcode", barcodeLookupRoutes);
 app.use("/api/activation", activationRoutes);
+
+// 📧 Contact Us route (with specific rate limiting)
+app.post("/api/contact/send", contactRateLimit, sendContactMessage);
 
 // Special nested routes
 import * as productController from "./src/controllers/softwareProductController";
