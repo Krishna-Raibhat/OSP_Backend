@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import sharp from "sharp";
 import { env } from "./env";
 import dns from "dns";
@@ -148,4 +148,36 @@ export async function uploadCartridgeBrandImageToS3(
     console.error("S3 upload error:", error);
     throw new Error("Failed to upload image to S3");
   }
+}
+
+// Delete an image from S3 by path
+export async function deleteS3Image(path: string | null): Promise<void> {
+  if (!path) {
+    console.log("No path provided for deletion, skipping");
+    return; // Nothing to delete
+  }
+  
+  try {
+    console.log(`Attempting to delete S3 image: ${path}`);
+    const client = getS3Client();
+    const deleteCommand = new DeleteObjectCommand({
+      Bucket: env.AWS_BUCKET_NAME!,
+      Key: path,
+    });
+    await client.send(deleteCommand);
+    console.log(`Successfully deleted S3 image: ${path}`);
+  } catch (error) {
+    console.error(`Failed to delete S3 image: ${path}`, error);
+    // Don't throw - deletion failure shouldn't block the update
+  }
+}
+
+// Delete both original and thumbnail images
+export async function deleteBrandImages(originalPath: string | null, thumbnailPath: string | null): Promise<void> {
+  console.log(`Deleting brand images - Original: ${originalPath}, Thumbnail: ${thumbnailPath}`);
+  await Promise.all([
+    deleteS3Image(originalPath),
+    deleteS3Image(thumbnailPath),
+  ]);
+  console.log("Brand images deletion completed");
 }

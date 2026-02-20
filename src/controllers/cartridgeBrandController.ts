@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
 import { HttpError } from "../utils/errors";
 import { CartridgeBrandService } from "../services/cartridgeBrandService";
-import { uploadCartridgeBrandImageToS3 } from "../utils/s3Upload";
+import { uploadCartridgeBrandImageToS3, deleteBrandImages } from "../utils/s3Upload";
 import { env } from "../utils/env";
 import { validate as isUUID } from "uuid";
 
@@ -131,10 +131,23 @@ export const CartridgeBrandController = {
 
       // Upload new image to S3 if provided
       if (req.file) {
+        console.log(`Updating cartridge brand ${id} with new image`);
+        console.log(`Existing brand images - Original: ${currentBrand.original_url}, Thumbnail: ${currentBrand.thumbnail_url}`);
+        
         const brandName = name || currentBrand.name;
         const { originalPath, thumbnailPath } = await uploadCartridgeBrandImageToS3(req.file, brandName);
+        console.log(`New images uploaded - Original: ${originalPath}, Thumbnail: ${thumbnailPath}`);
         original_url = originalPath;
         thumbnail_url = thumbnailPath;
+        
+        // Delete old images from S3 (await to ensure it completes)
+        try {
+          await deleteBrandImages(currentBrand.original_url, currentBrand.thumbnail_url);
+          console.log("Old cartridge brand images deleted successfully");
+        } catch (err) {
+          console.error("Failed to delete old cartridge brand images:", err);
+          // Continue anyway - deletion failure shouldn't block the update
+        }
       }
 
       const brand = await CartridgeBrandService.updateCartridgeBrand({
@@ -169,7 +182,24 @@ export const CartridgeBrandController = {
           .status(400)
           .json({ message: "Invalid ID format. ID must be a valid UUID." });
       }
+      
+      // Get brand first to retrieve image paths
+      const existingBrand = await CartridgeBrandService.getCartridgeBrandById(id);
+      if (!existingBrand) throw new HttpError(404, "Brand not found.");
+      console.log(`Deleting cartridge brand ${id} with images - Original: ${existingBrand.original_url}, Thumbnail: ${existingBrand.thumbnail_url}`);
+      
+      // Delete from database
       await CartridgeBrandService.deleteCartridgeBrand(id);
+      
+      // Delete images from S3 (await to ensure it completes)
+      try {
+        await deleteBrandImages(existingBrand.original_url, existingBrand.thumbnail_url);
+        console.log("Cartridge brand images deleted from S3 successfully");
+      } catch (err) {
+        console.error("Failed to delete cartridge brand images from S3:", err);
+        // Continue anyway - deletion failure shouldn't block the response
+      }
+      
       return res.status(200).json({ message: "Brand deleted successfully." });
     } catch (err: any) {
       if (err instanceof HttpError)

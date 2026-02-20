@@ -2,7 +2,7 @@ import type { Request, Response } from "express";
 import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
 import { HttpError, validateUUID } from "../utils/errors";
 import * as brandService from "../services/softwareBrandService";
-import { uploadBrandImageToS3 } from "../utils/s3Upload";
+import { uploadBrandImageToS3, deleteBrandImages } from "../utils/s3Upload";
 import { env } from "../utils/env";
 
 // Helper to parse is_active from multipart/form-data
@@ -91,13 +91,28 @@ export async function updateBrand(req: Request, res: Response) {
 
     // Upload new image to S3 if provided
     if (req.file) {
-      // Get existing brand only if we need the name for S3 upload
+      console.log(`Updating brand ${id} with new image`);
+      
+      // Get existing brand to retrieve old image paths and name
       const existingBrand = await brandService.getBrandById(id);
+      console.log(`Existing brand images - Original: ${existingBrand.original_url}, Thumbnail: ${existingBrand.thumbnail_url}`);
+      
       const brandName = req.body.name || existingBrand.name;
       
+      // Upload new images
       const { originalPath, thumbnailPath } = await uploadBrandImageToS3(req.file, brandName);
+      console.log(`New images uploaded - Original: ${originalPath}, Thumbnail: ${thumbnailPath}`);
       original_url = originalPath;
       thumbnail_url = thumbnailPath;
+      
+      // Delete old images from S3 (await to ensure it completes)
+      try {
+        await deleteBrandImages(existingBrand.original_url, existingBrand.thumbnail_url);
+        console.log("Old brand images deleted successfully");
+      } catch (err) {
+        console.error("Failed to delete old brand images:", err);
+        // Continue anyway - deletion failure shouldn't block the update
+      }
     }
 
     const data = await brandService.updateBrand({ 
@@ -122,7 +137,23 @@ export async function updateBrand(req: Request, res: Response) {
 export async function deleteBrand(req: Request, res: Response) {
   try {
     const id = validateUUID(req.params.id, "Brand ID");
+    
+    // Get brand first to retrieve image paths
+    const existingBrand = await brandService.getBrandById(id);
+    console.log(`Deleting brand ${id} with images - Original: ${existingBrand.original_url}, Thumbnail: ${existingBrand.thumbnail_url}`);
+    
+    // Delete from database
     const data = await brandService.deleteBrand(id);
+    
+    // Delete images from S3 (await to ensure it completes)
+    try {
+      await deleteBrandImages(existingBrand.original_url, existingBrand.thumbnail_url);
+      console.log("Brand images deleted from S3 successfully");
+    } catch (err) {
+      console.error("Failed to delete brand images from S3:", err);
+      // Continue anyway - deletion failure shouldn't block the response
+    }
+    
     return res.status(200).json({ message: "Brand deleted successfully.", data });
   } catch (err: any) {
     if (err instanceof HttpError) return res.status(err.status).json({ message: err.message });
