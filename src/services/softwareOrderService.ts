@@ -218,9 +218,12 @@ export async function createOrder(input: CreateOrderInput) {
         FROM software_order_items oi
         JOIN software_plans pl ON oi.software_plan_id = pl.id
         JOIN software_products p ON pl.software_product_id = p.id
-        WHERE oi.order_id = $1;
+        WHERE oi.order_id = $1
+        ORDER BY oi.created_at ASC;
       `;
       const itemsResult = await pool.query(itemsQuery, [order.id]);
+      
+      console.log(`[createOrder] Found ${itemsResult.rows.length} order items for order ${order.id}`);
       
       const orderItems = itemsResult.rows.map(item => ({
         productName: item.product_name,
@@ -465,9 +468,12 @@ export async function createOrderFromCart(input: {
         FROM software_order_items oi
         JOIN software_plans pl ON oi.software_plan_id = pl.id
         JOIN software_products p ON pl.software_product_id = p.id
-        WHERE oi.order_id = $1;
+        WHERE oi.order_id = $1
+        ORDER BY oi.created_at ASC;
       `;
       const itemsResult = await pool.query(itemsQuery, [order.id]);
+      
+      console.log(`[createOrderFromCart] Found ${itemsResult.rows.length} order items for order ${order.id}`);
       
       const orderItems = itemsResult.rows.map(item => ({
         productName: item.product_name,
