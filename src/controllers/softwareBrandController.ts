@@ -151,11 +151,19 @@ let s3ClientInstance: S3Client | null = null;
 
 function getS3ClientInstance(): S3Client {
   if (!s3ClientInstance) {
+    // Validate credentials
+    const accessKeyId = env.AWS_ACCESS_KEY_ID?.trim();
+    const secretAccessKey = env.AWS_SECRET_ACCESS_KEY?.trim();
+    
+    if (!accessKeyId || !secretAccessKey) {
+      throw new Error("AWS credentials are not properly configured. Check AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY in .env");
+    }
+    
     s3ClientInstance = new S3Client({
       region: env.AWS_REGION || "us-east-1",
       credentials: {
-        accessKeyId: env.AWS_ACCESS_KEY_ID!,
-        secretAccessKey: env.AWS_SECRET_ACCESS_KEY!,
+        accessKeyId,
+        secretAccessKey,
       },
       endpoint: env.AWS_ENDPOINT,
       forcePathStyle: true,
@@ -182,6 +190,12 @@ export async function getBrandImage(req: Request, res: Response) {
     });
 
     const response = await s3Client.send(command);
+
+    // Set CORS headers explicitly for images (MUST be set before streaming)
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
 
     // Set content type
     if (response.ContentType) {
