@@ -11,11 +11,19 @@ let s3Client: S3Client | null = null;
 
 function getS3Client(): S3Client {
   if (!s3Client) {
+    // Validate credentials
+    const accessKeyId = env.AWS_ACCESS_KEY_ID?.trim();
+    const secretAccessKey = env.AWS_SECRET_ACCESS_KEY?.trim();
+    
+    if (!accessKeyId || !secretAccessKey) {
+      throw new Error("AWS credentials are not properly configured. Check AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY in .env");
+    }
+    
     s3Client = new S3Client({
       region: env.AWS_REGION || "us-east-1",
       credentials: {
-        accessKeyId: env.AWS_ACCESS_KEY_ID!,
-        secretAccessKey: env.AWS_SECRET_ACCESS_KEY!,
+        accessKeyId,
+        secretAccessKey,
       },
       endpoint: env.AWS_ENDPOINT,
       forcePathStyle: true,

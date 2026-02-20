@@ -7,6 +7,7 @@ import * as qrController from "../controllers/cartridgeProductQrController";
 const router = Router();
 
 router.get("/",authMiddleware, requireAdmin, qrController.getAllQrCodes);
+router.get("/image/:productId", qrController.getQrImage); // Public route to get QR image
 router.get("/:productId",authMiddleware, requireAdmin, qrController.getQrCodeByProductId);
 router.post("/:productId/deactivate", authMiddleware, requireAdmin, qrController.deactivateQrCode);
 router.post("/:productId/reactivate", authMiddleware, requireAdmin, qrController.reactivateQrCode);

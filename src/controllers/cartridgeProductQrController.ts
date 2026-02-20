@@ -105,3 +105,51 @@ export async function getAllQrCodes(req: Request, res: Response) {
 //     return err;
 //   }
 // }
+
+export async function getQrImage(req: Request, res: Response) {
+  try {
+    const productId = req.params.productId as string;
+    
+    if (!productId) {
+      return res.status(400).json({ message: "Product ID is required." });
+    }
+
+    // Get QR code data from database
+    const qrData = await qrService.getProductQRByProductId(productId);
+    
+    if (!qrData || !qrData.qr_value) {
+      return res.status(404).json({ message: "QR code not found for this product." });
+    }
+
+    // Construct full file path
+    const fs = require('fs');
+    const path = require('path');
+    const filePath = path.join(__dirname, '../../../', qrData.qr_value);
+
+    // Check if file exists
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ message: "QR code image file not found." });
+    }
+
+    // Set CORS headers for cross-origin access
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+
+    // Set content type
+    res.setHeader("Content-Type", "image/png");
+
+    // Set cache headers (cache for 1 year)
+    res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+
+    // Send the file
+    return res.sendFile(filePath);
+  } catch (err: any) {
+    if (err instanceof HttpError) {
+      return res.status(err.status).json({ message: err.message });
+    }
+    console.error("Get QR image error:", err);
+    return res.status(500).json({ message: "Server error." });
+  }
+}

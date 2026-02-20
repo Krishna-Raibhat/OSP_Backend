@@ -94,6 +94,7 @@ export async function getPlansByProductForCustomer(product_id: string, userRole?
       plan_name: plan.plan_name,
       duration_type: plan.duration_type,
       price: displayPrice,
+      special_price: plan.special_price, // Always include special_price
       original_price: hasDiscount ? plan.price : null,
       features: plan.features,
       has_discount: hasDiscount,
