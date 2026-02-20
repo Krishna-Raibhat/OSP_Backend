@@ -541,19 +541,38 @@ export async function getOrderById(order_id: string, user_id?: string) {
   return result.rows[0];
 }
 
-// Get user's orders
+// Get user's orders with details
 export async function getUserOrders(user_id: string) {
   const q = `
     SELECT 
       o.id,
       o.billing_full_name,
       o.billing_email,
+      o.billing_phone,
+      o.billing_address,
       o.status,
       o.total,
       o.created_at,
+      o.updated_at,
+      json_agg(
+        json_build_object(
+          'id', oi.id,
+          'software_plan_id', oi.software_plan_id,
+          'plan_name', pl.plan_name,
+          'duration_type', pl.duration_type,
+          'product_name', p.name,
+          'brand_name', b.name,
+          'unit_price', oi.unit_price,
+          'serial_number', oi.serial_number,
+          'created_at', oi.created_at
+        ) ORDER BY oi.created_at ASC
+      ) as items,
       COUNT(oi.id) as item_count
     FROM software_orders o
     LEFT JOIN software_order_items oi ON o.id = oi.order_id
+    LEFT JOIN software_plans pl ON oi.software_plan_id = pl.id
+    LEFT JOIN software_products p ON pl.software_product_id = p.id
+    LEFT JOIN software_brands b ON p.brand_id = b.id
     WHERE o.buyer_user_id = $1
     GROUP BY o.id
     ORDER BY o.created_at DESC;

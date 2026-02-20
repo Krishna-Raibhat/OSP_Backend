@@ -522,19 +522,39 @@ export async function getOrderById(order_id: string, user_id?: string) {
   return result.rows[0];
 }
 
-// Get user's orders
+// Get user's orders with details
 export async function getUserOrders(user_id: string) {
   const q = `
     SELECT 
       o.id,
       o.billing_full_name,
       o.billing_email,
+      o.billing_phone,
+      o.billing_address,
       o.status,
       o.total,
       o.created_at,
+      o.updated_at,
+      json_agg(
+        json_build_object(
+          'id', oi.id,
+          'cartridge_product_id', oi.cartridge_product_id,
+          'product_name', p.product_name,
+          'model_number', p.model_number,
+          'brand_name', b.name,
+          'category_name', c.name,
+          'quantity', oi.quantity,
+          'unit_price', oi.unit_price,
+          'serial_number', oi.serial_number,
+          'created_at', oi.created_at
+        ) ORDER BY oi.created_at ASC
+      ) as items,
       COUNT(oi.id) as item_count
     FROM cartridge_orders o
     LEFT JOIN cartridge_order_items oi ON o.id = oi.order_id
+    LEFT JOIN cartridge_products p ON oi.cartridge_product_id = p.id
+    LEFT JOIN cartridge_brands b ON p.brand_id = b.id
+    LEFT JOIN cartridge_categories c ON p.category_id = c.id
     WHERE o.buyer_user_id = $1
     GROUP BY o.id
     ORDER BY o.created_at DESC;

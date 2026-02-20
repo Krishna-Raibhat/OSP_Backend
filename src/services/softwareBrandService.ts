@@ -1,15 +1,14 @@
 import { pool } from "../config/db";
 import { HttpError, isPgUniqueViolation, isPgForeignKeyViolation } from "../utils/errors";
-import type { SoftwareBrand, SoftwareBrandWithCategory } from "../models/softwareModels";
+import type { SoftwareBrand } from "../models/softwareModels";
 
 export async function createBrand(input: { 
   name?: string; 
-  category_id?: string;
   thumbnail_url?: string; 
   original_url?: string; 
   is_active?: boolean 
 }) {
-  const { name, category_id, thumbnail_url, original_url, is_active = true } = input;
+  const { name, thumbnail_url, original_url, is_active = true } = input;
 
   if (!name) throw new HttpError(400, "Brand name is required.");
 
@@ -18,13 +17,12 @@ export async function createBrand(input: {
     const normalizedName = name.trim().toLowerCase();
     
     const q = `
-      INSERT INTO software_brands (name, category_id, thumbnail_url, original_url, is_active)
-      VALUES ($1, $2, $3, $4, $5)
+      INSERT INTO software_brands (name, thumbnail_url, original_url, is_active)
+      VALUES ($1, $2, $3, $4)
       RETURNING *;
     `;
     const result = await pool.query<SoftwareBrand>(q, [
       normalizedName, 
-      category_id ?? null,
       thumbnail_url ?? null, 
       original_url ?? null, 
       is_active
@@ -36,33 +34,28 @@ export async function createBrand(input: {
     if (isPgUniqueViolation(err)) {
       throw new HttpError(409, "Brand name already exists.");
     }
-    if (isPgForeignKeyViolation(err)) {
-      throw new HttpError(400, "Invalid category ID.");
-    }
     throw err;
   }
 }
 
 export async function getAllBrands() {
   const q = `
-    SELECT b.*, c.name as category_name 
-    FROM software_brands b 
-    LEFT JOIN software_categories c ON b.category_id = c.id 
-    ORDER BY b.name ASC;
+    SELECT * 
+    FROM software_brands 
+    ORDER BY name ASC;
   `;
-  const result = await pool.query<SoftwareBrandWithCategory>(q);
+  const result = await pool.query<SoftwareBrand>(q);
   
   return result.rows;
 }
 
 export async function getBrandById(id: string) {
   const q = `
-    SELECT b.*, c.name as category_name 
-    FROM software_brands b 
-    LEFT JOIN software_categories c ON b.category_id = c.id 
-    WHERE b.id = $1;
+    SELECT * 
+    FROM software_brands 
+    WHERE id = $1;
   `;
-  const result = await pool.query<SoftwareBrandWithCategory>(q, [id]);
+  const result = await pool.query<SoftwareBrand>(q, [id]);
   if (!result.rows[0]) throw new HttpError(404, "Brand not found.");
   
   return result.rows[0];
@@ -71,14 +64,13 @@ export async function getBrandById(id: string) {
 export async function updateBrand(input: { 
   id: string; 
   name?: string; 
-  category_id?: string;
   thumbnail_url?: string; 
   original_url?: string; 
   is_active?: boolean 
 }) {
-  const { id, name, category_id, thumbnail_url, original_url, is_active } = input;
+  const { id, name, thumbnail_url, original_url, is_active } = input;
 
-  if (!name && category_id === undefined && thumbnail_url === undefined && original_url === undefined && is_active === undefined) {
+  if (!name && thumbnail_url === undefined && original_url === undefined && is_active === undefined) {
     throw new HttpError(400, "At least one field is required.");
   }
 
@@ -91,12 +83,6 @@ export async function updateBrand(input: {
       updates.push(`name = $${paramIndex++}`);
       // Normalize name to lowercase for case-insensitive uniqueness
       values.push(name.trim().toLowerCase());
-    }
-    if (category_id !== undefined) {
-      updates.push(`category_id = $${paramIndex++}`);
-      // Convert empty string to null
-      const normalizedCategoryId = category_id && category_id.trim() !== '' ? category_id : null;
-      values.push(normalizedCategoryId);
     }
     if (thumbnail_url !== undefined) {
       updates.push(`thumbnail_url = $${paramIndex++}`);
@@ -129,9 +115,6 @@ export async function updateBrand(input: {
     if (err instanceof HttpError) throw err;
     if (isPgUniqueViolation(err)) {
       throw new HttpError(409, "Brand name already exists.");
-    }
-    if (isPgForeignKeyViolation(err)) {
-      throw new HttpError(400, "Invalid category ID.");
     }
     throw err;
   }

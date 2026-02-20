@@ -16,20 +16,9 @@ function parseIsActive(value: any): boolean {
   return Boolean(value);
 }
 
-// Helper to normalize category_id (trim whitespace, convert empty to undefined)
-function normalizeCategoryId(value: any): string | undefined {
-  if (value === undefined) return undefined;
-  if (!value) return undefined; // null, empty string, etc. become undefined
-  if (typeof value === 'string') {
-    const trimmed = value.trim();
-    return trimmed === '' ? undefined : trimmed;
-  }
-  return value;
-}
-
 export async function createBrand(req: Request, res: Response) {
   try {
-    const { name, category_id, is_active } = req.body;
+    const { name, is_active } = req.body;
 
     if (!name) {
       return res.status(400).json({ message: "Brand name is required." });
@@ -40,8 +29,7 @@ export async function createBrand(req: Request, res: Response) {
       return res.status(400).json({ message: "Brand image is required." });
     }
 
-    // Use helper functions for parsing
-    const normalizedCategoryId = normalizeCategoryId(category_id);
+    // Use helper function for parsing
     const isActiveBoolean = parseIsActive(is_active);
 
     // Upload image to S3 first
@@ -50,7 +38,6 @@ export async function createBrand(req: Request, res: Response) {
     // Create brand with image paths
     const brandData = await brandService.createBrand({
       name,
-      category_id: normalizedCategoryId,
       is_active: isActiveBoolean,
       thumbnail_url: thumbnailPath,
       original_url: originalPath,
@@ -94,11 +81,10 @@ export async function updateBrand(req: Request, res: Response) {
   try {
     const id = validateUUID(req.params.id, "Brand ID");
     
-    // Use helper functions for parsing
+    // Use helper function for parsing
     const parsedIsActive = req.body.is_active !== undefined 
       ? parseIsActive(req.body.is_active) 
       : undefined;
-    const normalizedCategoryId = normalizeCategoryId(req.body.category_id);
     
     let thumbnail_url = undefined;
     let original_url = undefined;
@@ -118,7 +104,6 @@ export async function updateBrand(req: Request, res: Response) {
       id, 
       ...req.body,
       ...(parsedIsActive !== undefined && { is_active: parsedIsActive }),
-      ...(normalizedCategoryId !== undefined && { category_id: normalizedCategoryId }),
       ...(thumbnail_url !== undefined && { thumbnail_url }),
       ...(original_url !== undefined && { original_url }),
     });

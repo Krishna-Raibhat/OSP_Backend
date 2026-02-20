@@ -14,3 +14,4 @@ router.put("/:id", authMiddleware, requireAdmin, uploadBrandImage, CartridgeBran
 router.delete("/:id", authMiddleware, requireAdmin, CartridgeBrandController.deleteCartridgeBrand);
 
 export default router;
+

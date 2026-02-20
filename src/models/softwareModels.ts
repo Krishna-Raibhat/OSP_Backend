@@ -3,17 +3,11 @@
 export type SoftwareBrand = {
   id: string;
   name: string;
-  category_id: string | null;
   thumbnail_url: string | null;
   original_url: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;
-};
-
-// Extended type for brands with category name (from JOIN queries)
-export type SoftwareBrandWithCategory = SoftwareBrand & {
-  category_name: string | null;
 };
 
 export type SoftwareCategory = {
