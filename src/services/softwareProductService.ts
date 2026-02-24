@@ -15,6 +15,30 @@ export async function createProduct(input: {
   if (!category_id) throw new HttpError(400, "Category ID is required.");
   if (!name) throw new HttpError(400, "Product name is required.");
 
+  // Validate that brand exists and is active
+  const brandCheck = await pool.query(
+    'SELECT id, name, is_active FROM software_brands WHERE id = $1',
+    [brand_id]
+  );
+  if (!brandCheck.rows[0]) {
+    throw new HttpError(404, "Brand not found.");
+  }
+  if (!brandCheck.rows[0].is_active) {
+    throw new HttpError(400, `Brand "${brandCheck.rows[0].name}" is inactive and cannot be used.`);
+  }
+
+  // Validate that category exists and is active
+  const categoryCheck = await pool.query(
+    'SELECT id, name, is_active FROM software_categories WHERE id = $1',
+    [category_id]
+  );
+  if (!categoryCheck.rows[0]) {
+    throw new HttpError(404, "Category not found.");
+  }
+  if (!categoryCheck.rows[0].is_active) {
+    throw new HttpError(400, `Category "${categoryCheck.rows[0].name}" is inactive and cannot be used.`);
+  }
+
   try {
     const q = `
       INSERT INTO software_products (brand_id, category_id, name, description, is_active)
@@ -105,6 +129,34 @@ export async function updateProduct(input: {
 
   if (!brand_id && !category_id && !name && description === undefined && is_active === undefined) {
     throw new HttpError(400, "At least one field is required.");
+  }
+
+  // Validate brand if being updated
+  if (brand_id !== undefined) {
+    const brandCheck = await pool.query(
+      'SELECT id, name, is_active FROM software_brands WHERE id = $1',
+      [brand_id]
+    );
+    if (!brandCheck.rows[0]) {
+      throw new HttpError(404, "Brand not found.");
+    }
+    if (!brandCheck.rows[0].is_active) {
+      throw new HttpError(400, `Brand "${brandCheck.rows[0].name}" is inactive and cannot be used.`);
+    }
+  }
+
+  // Validate category if being updated
+  if (category_id !== undefined) {
+    const categoryCheck = await pool.query(
+      'SELECT id, name, is_active FROM software_categories WHERE id = $1',
+      [category_id]
+    );
+    if (!categoryCheck.rows[0]) {
+      throw new HttpError(404, "Category not found.");
+    }
+    if (!categoryCheck.rows[0].is_active) {
+      throw new HttpError(400, `Category "${categoryCheck.rows[0].name}" is inactive and cannot be used.`);
+    }
   }
 
   try {
